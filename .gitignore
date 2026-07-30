@@ -1,1 +1,33 @@
-spec.md
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.output/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# SQLite databases (local dev)
+*.db
+*.sqlite
+*.sqlite3
