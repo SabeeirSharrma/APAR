@@ -10,6 +10,7 @@ import noteRoutes from './notes.js';
 import messageRoutes from './messages.js';
 import setupRoutes from './setup.js';
 import featureRoutes from './features.js';
+import customUiRoutes from './customUi.js';
 
 const router = Router();
 
@@ -27,5 +28,6 @@ router.use('/notes', noteRoutes);
 router.use('/messages', messageRoutes);
 router.use('/setup', setupRoutes);
 router.use('/features', featureRoutes);
+router.use('/custom-ui', customUiRoutes);
 
 export default router;

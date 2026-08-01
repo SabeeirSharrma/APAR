@@ -37,12 +37,12 @@ router.get('/', async (req: Request, res: Response) => {
   // Enrich with interviewer count and applicant count per round
   const enriched = rounds.map((r) => {
     const interviewerCount = getOne<{ count: number }>(
-      'SELECT COUNT(*) as count FROM interviewer_rounds WHERE round_id = ?',
-      { id: r.id },
+      'SELECT COUNT(*) as count FROM interviewer_rounds WHERE round_id = @roundId',
+      { roundId: r.id },
     );
     const applicantCount = getOne<{ count: number }>(
-      'SELECT COUNT(*) as count FROM applications WHERE current_round_id = ?',
-      { id: r.id },
+      'SELECT COUNT(*) as count FROM applications WHERE current_round_id = @roundId',
+      { roundId: r.id },
     );
     return {
       ...r,
@@ -56,7 +56,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 // GET /api/v1/rounds/:id — Get round details with assigned interviewers
 router.get('/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const round = getOne<{
@@ -69,7 +69,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     created_at: string;
     updated_at: string;
   }>(
-    'SELECT * FROM rounds WHERE id = ? AND company_id = ?',
+    'SELECT * FROM rounds WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
 
@@ -83,16 +83,16 @@ router.get('/:id', async (req: Request, res: Response) => {
     `SELECT i.id, i.email, i.name
      FROM interviewers i
      JOIN interviewer_rounds ir ON i.id = ir.interviewer_id
-     WHERE ir.round_id = ?`,
-    { id },
+     WHERE ir.round_id = @roundId`,
+    { roundId: id },
   );
 
   // Get applicants in this round
   const applicants = getMany<{ id: string; name: string; status: string; email: string }>(
     `SELECT id, name, status, email FROM applications
-     WHERE current_round_id = ?
+     WHERE current_round_id = @roundId
      ORDER BY created_at DESC`,
-    { id },
+    { roundId: id },
   );
 
   res.json({
@@ -118,7 +118,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
 
   // Check for duplicate round number
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM rounds WHERE company_id = ? AND round_number = ?',
+    'SELECT id FROM rounds WHERE company_id = @companyId AND round_number = @roundNumber',
     { companyId, roundNumber },
   );
   if (existing) {
@@ -132,14 +132,14 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
   const id = randomUUID();
   run(
     `INSERT INTO rounds (id, company_id, position_id, round_number, name, description)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     VALUES (@id, @companyId, @positionId, @roundNumber, @name, @description)`,
     { id, companyId, positionId: positionId || null, roundNumber, name, description: description || null },
   );
 
   // Update company's round count
   run(
-    `UPDATE companies SET round_count = (SELECT MAX(round_number) FROM rounds WHERE company_id = ?), updated_at = datetime('now') WHERE id = ?`,
-    { companyId, companyId2: companyId },
+    `UPDATE companies SET round_count = (SELECT MAX(round_number) FROM rounds WHERE company_id = @companyId), updated_at = datetime('now') WHERE id = @companyId`,
+    { companyId },
   );
 
   res.status(201).json({
@@ -151,7 +151,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
 
 // PATCH /api/v1/rounds/:id — Update a round
 router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const result = updateRoundSchema.safeParse(req.body);
@@ -165,7 +165,7 @@ router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Res
   }
 
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM rounds WHERE id = ? AND company_id = ?',
+    'SELECT id FROM rounds WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!existing) {
@@ -180,7 +180,7 @@ router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Res
   if (roundNumber !== undefined) {
     // Check for duplicate round number
     const dup = getOne<{ id: string }>(
-      'SELECT id FROM rounds WHERE company_id = ? AND round_number = ? AND id != ?',
+      'SELECT id FROM rounds WHERE company_id = @companyId AND round_number = @roundNumber AND id != @id',
       { companyId, roundNumber, id },
     );
     if (dup) {
@@ -203,11 +203,11 @@ router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Res
 
 // DELETE /api/v1/rounds/:id — Delete a round
 router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM rounds WHERE id = ? AND company_id = ?',
+    'SELECT id FROM rounds WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!existing) {
@@ -217,16 +217,16 @@ router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Re
 
   transaction(() => {
     // Remove interviewer-round assignments
-    run('DELETE FROM interviewer_rounds WHERE round_id = ?', { id });
+    run('DELETE FROM interviewer_rounds WHERE round_id = @roundId', { roundId: id });
 
     // Clear current_round_id from applications in this round
     run(
-      `UPDATE applications SET current_round_id = NULL, updated_at = datetime('now') WHERE current_round_id = ?`,
-      { id },
+      `UPDATE applications SET current_round_id = NULL, updated_at = datetime('now') WHERE current_round_id = @roundId`,
+      { roundId: id },
     );
 
     // Delete the round
-    run('DELETE FROM rounds WHERE id = ?', { id });
+    run('DELETE FROM rounds WHERE id = @id', { id });
   });
 
   res.json({ success: true, message: 'Round deleted' });
@@ -234,7 +234,7 @@ router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Re
 
 // POST /api/v1/rounds/:id/interviewers — Assign interviewer to round
 router.post('/:id/interviewers', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
   const { interviewerId } = req.body;
 
@@ -244,7 +244,7 @@ router.post('/:id/interviewers', requireRole('company_admin'), async (req: Reque
   }
 
   const round = getOne<{ id: string }>(
-    'SELECT id FROM rounds WHERE id = ? AND company_id = ?',
+    'SELECT id FROM rounds WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!round) {
@@ -253,7 +253,7 @@ router.post('/:id/interviewers', requireRole('company_admin'), async (req: Reque
   }
 
   const interviewer = getOne<{ id: string }>(
-    'SELECT id FROM interviewers WHERE id = ? AND company_id = ?',
+    'SELECT id FROM interviewers WHERE id = @interviewerId AND company_id = @companyId',
     { interviewerId, companyId },
   );
   if (!interviewer) {
@@ -262,7 +262,7 @@ router.post('/:id/interviewers', requireRole('company_admin'), async (req: Reque
   }
 
   run(
-    'INSERT OR IGNORE INTO interviewer_rounds (interviewer_id, round_id) VALUES (?, ?)',
+    'INSERT OR IGNORE INTO interviewer_rounds (interviewer_id, round_id) VALUES (@interviewerId, @roundId)',
     { interviewerId, roundId: id },
   );
 
@@ -271,10 +271,11 @@ router.post('/:id/interviewers', requireRole('company_admin'), async (req: Reque
 
 // DELETE /api/v1/rounds/:id/interviewers/:interviewerId — Remove interviewer from round
 router.delete('/:id/interviewers/:interviewerId', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id, interviewerId } = req.params;
+  const id = req.params.id as string;
+  const interviewerId = req.params.interviewerId as string;
 
   run(
-    'DELETE FROM interviewer_rounds WHERE round_id = ? AND interviewer_id = ?',
+    'DELETE FROM interviewer_rounds WHERE round_id = @roundId AND interviewer_id = @interviewerId',
     { roundId: id, interviewerId },
   );
 
@@ -283,12 +284,13 @@ router.delete('/:id/interviewers/:interviewerId', requireRole('company_admin'), 
 
 // POST /api/v1/rounds/:id/applicants/:applicantId/advance — Advance applicant to next round
 router.post('/:id/applicants/:applicantId/advance', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id, applicantId } = req.params;
+  const id = req.params.id as string;
+  const applicantId = req.params.applicantId as string;
   const { companyId } = req.auth!;
 
   // Look up current round
   const currentRound = getOne<{ id: string; round_number: number; company_id: string }>(
-    'SELECT id, round_number, company_id FROM rounds WHERE id = ? AND company_id = ?',
+    'SELECT id, round_number, company_id FROM rounds WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!currentRound) {
@@ -298,7 +300,7 @@ router.post('/:id/applicants/:applicantId/advance', requireRole('company_admin')
 
   // Look up applicant
   const applicant = getOne<{ id: string; current_round_id: string | null; position_id: string }>(
-    'SELECT id, current_round_id, position_id FROM applications WHERE id = ?',
+    'SELECT id, current_round_id, position_id FROM applications WHERE id = @applicantId',
     { applicantId },
   );
   if (!applicant) {
@@ -314,7 +316,7 @@ router.post('/:id/applicants/:applicantId/advance', requireRole('company_admin')
   // Find next round
   const nextRound = getOne<{ id: string; round_number: number }>(
     `SELECT id, round_number FROM rounds
-     WHERE company_id = ? AND round_number = ?
+     WHERE company_id = @companyId AND round_number = @roundNumber
      ORDER BY round_number ASC LIMIT 1`,
     { companyId, roundNumber: currentRound.round_number + 1 },
   );
@@ -328,27 +330,27 @@ router.post('/:id/applicants/:applicantId/advance', requireRole('company_admin')
   const candidates = getMany<{ id: string }>(
     `SELECT i.id FROM interviewers i
      JOIN interviewer_rounds ir ON i.id = ir.interviewer_id
-     WHERE ir.round_id = ?
+     WHERE ir.round_id = @roundId
      ORDER BY (
        SELECT COUNT(*) FROM applications a
        WHERE a.assigned_interviewer_id = i.id
-         AND a.current_round_id = ?
+         AND a.current_round_id = @currentRoundId
          AND a.status NOT IN ('approved', 'rejected')
      ) ASC`,
-    { roundId: nextRound.id },
+    { roundId: nextRound.id, currentRoundId: nextRound.id },
   );
 
   transaction(() => {
     run(
       `UPDATE applications
-       SET current_round_id = ?, status = 'queued', updated_at = datetime('now')
-       WHERE id = ?`,
+       SET current_round_id = @currentRoundId, status = 'queued', updated_at = datetime('now')
+       WHERE id = @applicationId`,
       { currentRoundId: nextRound.id, applicationId: applicantId },
     );
 
     if (candidates.length > 0) {
       run(
-        `UPDATE applications SET assigned_interviewer_id = ?, updated_at = datetime('now') WHERE id = ?`,
+        `UPDATE applications SET assigned_interviewer_id = @interviewerId, updated_at = datetime('now') WHERE id = @applicationId`,
         { interviewerId: candidates[0].id, applicationId: applicantId },
       );
     }

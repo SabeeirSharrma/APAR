@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interviewer — Desktop</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo">APAR</div>
+      <nav>
+        <a href="#" class="active" data-view="dashboard">Dashboard</a>
+        <a href="#" data-view="candidates">My Candidates</a>
+        <a href="#" data-view="messages">Messages</a>
+      </nav>
+      <div class="sidebar-footer">
+        <span id="user-name">Interviewer</span>
+        <button id="logout-btn" class="btn btn-sm">Logout</button>
+      </div>
+    </aside>
+    <main class="content">
+      <div id="view-dashboard" class="view active">
+        <h1>Dashboard</h1>
+        <div class="stats">
+          <div class="stat-card"><div class="stat-value" id="stat-pending">0</div><div class="stat-label">Pending Review</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-approved">0</div><div class="stat-label">Approved</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-rejected">0</div><div class="stat-label">Rejected</div></div>
+        </div>
+      </div>
+      <div id="view-candidates" class="view">
+        <h1>My Candidates</h1>
+        <div id="candidates-list" class="card-list"></div>
+      </div>
+      <div id="view-messages" class="view">
+        <h1>Messages</h1>
+        <div id="messages-container"></div>
+      </div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

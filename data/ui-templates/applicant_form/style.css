@@ -1,0 +1,33 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.container { width: 100%; max-width: 480px; }
+.card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 32px; }
+.header { text-align: center; margin-bottom: 24px; }
+h1 { font-size: 22px; margin-bottom: 6px; }
+.subtitle { color: #64748b; font-size: 14px; }
+
+/* Form */
+.form-group { margin-bottom: 16px; }
+label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #374151; }
+input, select, textarea { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; transition: border-color 0.15s; }
+input:focus, select:focus, textarea:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+textarea { resize: vertical; }
+
+/* Upload zone */
+.upload-zone { border: 2px dashed #d1d5db; border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.upload-zone:hover, .upload-zone.dragover { border-color: #3b82f6; background: #eff6ff; }
+.upload-text { font-size: 14px; color: #64748b; }
+.upload-link { color: #3b82f6; text-decoration: underline; cursor: pointer; }
+.upload-filename { font-size: 13px; color: #22c55e; margin-top: 6px; font-weight: 500; }
+
+/* Buttons */
+.btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; }
+.btn-primary { background: #3b82f6; color: #fff; }
+.btn-primary:hover { background: #2563eb; }
+.btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+.btn-block { width: 100%; margin-top: 8px; }
+
+/* Success */
+.success-message { text-align: center; padding: 20px 0; }
+.success-message h2 { color: #22c55e; margin-bottom: 8px; }
+.app-id { font-size: 12px; color: #94a3b8; margin-top: 12px; }

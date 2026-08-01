@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo">APAR Admin</div>
+      <nav>
+        <a href="#" class="active" data-view="dashboard">Dashboard</a>
+        <a href="#" data-view="positions">Positions</a>
+        <a href="#" data-view="interviewers">Interviewers</a>
+        <a href="#" data-view="applicants">Applicants</a>
+        <a href="#" data-view="rounds">Rounds</a>
+        <a href="#" data-view="tags">Tags</a>
+        <a href="#" data-view="settings">Settings</a>
+      </nav>
+      <div class="sidebar-footer">
+        <span id="company-name">Company</span>
+        <button id="logout-btn" class="btn btn-sm">Logout</button>
+      </div>
+    </aside>
+    <main class="content">
+      <div id="view-dashboard" class="view active">
+        <h1>Dashboard</h1>
+        <div class="stats">
+          <div class="stat-card"><div class="stat-value" id="stat-total">0</div><div class="stat-label">Total Applicants</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-pending">0</div><div class="stat-label">Pending Review</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-approved">0</div><div class="stat-label">Approved</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-rejected">0</div><div class="stat-label">Rejected</div></div>
+        </div>
+      </div>
+      <div id="view-positions" class="view"><h1>Positions</h1><div id="positions-list"></div></div>
+      <div id="view-interviewers" class="view"><h1>Interviewers</h1><div id="interviewers-list"></div></div>
+      <div id="view-applicants" class="view"><h1>Applicants</h1><div id="applicants-list"></div></div>
+      <div id="view-rounds" class="view"><h1>Rounds</h1><div id="rounds-list"></div></div>
+      <div id="view-tags" class="view"><h1>Tags</h1><div id="tags-list"></div></div>
+      <div id="view-settings" class="view"><h1>Settings</h1><div id="settings-content"></div></div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

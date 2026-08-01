@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APAR — Application Status</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1e293b; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 32px; max-width: 480px; width: 100%; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    .subtitle { color: #64748b; margin-bottom: 24px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-weight: 500; margin-bottom: 4px; font-size: 14px; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; font-family: monospace; }
+    input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+    button { width: 100%; padding: 10px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; }
+    button:hover { background: #2563eb; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    .result { display: none; margin-top: 24px; }
+    .status-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; }
+    .status-card h3 { font-size: 14px; color: #64748b; margin-bottom: 8px; }
+    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; margin-bottom: 12px; }
+    .status-queued { background: #fef3c7; color: #92400e; }
+    .status-processing { background: #dbeafe; color: #1e40af; }
+    .status-verifying { background: #e0e7ff; color: #3730a3; }
+    .status-delivered { background: #d1fae5; color: #065f46; }
+    .status-approved { background: #d1fae5; color: #065f46; }
+    .status-rejected { background: #fee2e2; color: #991b1b; }
+    .status-pending-review { background: #fef3c7; color: #92400e; }
+    .detail { font-size: 14px; margin-bottom: 4px; }
+    .detail strong { color: #475569; }
+    .error { color: #dc2626; font-size: 14px; margin-top: 12px; display: none; }
+    .loading { text-align: center; color: #64748b; display: none; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Check Application Status</h1>
+    <p class="subtitle">Enter your application ID to see the current status.</p>
+
+    <form id="statusForm">
+      <div class="form-group">
+        <label for="applicationId">Application ID</label>
+        <input type="text" id="applicationId" placeholder="e.g. a1b2c3d4-e5f6-..." required>
+      </div>
+      <button type="submit" id="checkBtn">Check Status</button>
+    </form>
+
+    <div class="loading" id="loading">Checking...</div>
+    <div class="error" id="error"></div>
+
+    <div class="result" id="result">
+      <div class="status-card">
+        <h3>Application Status</h3>
+        <div id="statusBadge" class="status-badge"></div>
+        <p class="detail"><strong>Position:</strong> <span id="position"></span></p>
+        <p class="detail"><strong>Company:</strong> <span id="company"></span></p>
+        <p class="detail" id="roundRow"><strong>Current Round:</strong> <span id="round"></span></p>
+        <p class="detail"><strong>Submitted:</strong> <span id="submitted"></span></p>
+        <p class="detail"><strong>Last Updated:</strong> <span id="updated"></span></p>
+        <p class="detail" style="margin-top: 8px; color: #475569;" id="statusMessage"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('statusForm');
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const result = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const appId = document.getElementById('applicationId').value.trim();
+      if (!appId) return;
+
+      loading.style.display = 'block';
+      error.style.display = 'none';
+      result.style.display = 'none';
+
+      try {
+        const res = await fetch(`/api/v1/status/${encodeURIComponent(appId)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+          error.textContent = data.error || 'Application not found.';
+          error.style.display = 'block';
+          return;
+        }
+
+        const d = data.data;
+        document.getElementById('statusBadge').textContent = d.status.replace(/-/g, ' ').toUpperCase();
+        document.getElementById('statusBadge').className = 'status-badge status-' + d.status;
+        document.getElementById('position').textContent = d.position;
+        document.getElementById('company').textContent = d.company;
+
+        if (d.currentRound) {
+          document.getElementById('round').textContent = d.currentRound;
+          document.getElementById('roundRow').style.display = 'block';
+        } else {
+          document.getElementById('roundRow').style.display = 'none';
+        }
+
+        document.getElementById('submitted').textContent = new Date(d.submittedAt).toLocaleString();
+        document.getElementById('updated').textContent = new Date(d.lastUpdated).toLocaleString();
+        document.getElementById('statusMessage').textContent = d.statusMessage;
+
+        result.style.display = 'block';
+      } catch (err) {
+        error.textContent = 'Failed to check status. Please try again.';
+        error.style.display = 'block';
+      } finally {
+        loading.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -8,7 +8,7 @@ import {
   modelProviderSetupSchema,
   createInterviewerSchema,
 } from '../lib/validation.js';
-import { generateKeyPair } from '../lib/encryption.js';
+import { generateKeyPair, generateInterviewerKey, storeInterviewerKey, encryptApiKey } from '../lib/encryption.js';
 import { hashPassword } from '../lib/auth.js';
 
 const router = Router();
@@ -28,7 +28,7 @@ router.get('/status', async (req: Request, res: Response) => {
     step_interviewers: number;
     is_complete: number;
   }>(
-    'SELECT step_database, step_branding, step_model_provider, step_interviewers, is_complete FROM setup_state WHERE company_id = ?',
+    'SELECT step_database, step_branding, step_model_provider, step_interviewers, is_complete FROM setup_state WHERE company_id = @companyId',
     { companyId },
   );
 
@@ -38,10 +38,10 @@ router.get('/status', async (req: Request, res: Response) => {
   }
 
   // Check actual state to determine completion
-  const hasDb = getOne<{ id: string }>('SELECT id FROM database_configs WHERE company_id = ?', { companyId });
-  const hasModel = getOne<{ id: string }>('SELECT id FROM model_provider_configs WHERE company_id = ?', { companyId });
+  const hasDb = getOne<{ id: string }>('SELECT id FROM database_configs WHERE company_id = @companyId', { companyId });
+  const hasModel = getOne<{ id: string }>('SELECT id FROM model_provider_configs WHERE company_id = @companyId', { companyId });
   const interviewerCount = getOne<{ count: number }>(
-    'SELECT COUNT(*) as count FROM interviewers WHERE company_id = ?',
+    'SELECT COUNT(*) as count FROM interviewers WHERE company_id = @companyId',
     { companyId },
   );
 
@@ -57,7 +57,7 @@ router.get('/status', async (req: Request, res: Response) => {
 
   // Update completion status
   run(
-    `UPDATE setup_state SET is_complete = ?, updated_at = datetime('now') WHERE company_id = ?`,
+    `UPDATE setup_state SET is_complete = @isComplete, updated_at = datetime('now') WHERE company_id = @companyId`,
     { isComplete: isComplete ? 1 : 0, companyId },
   );
 
@@ -87,27 +87,27 @@ router.post('/database', async (req: Request, res: Response) => {
 
   // Check if already configured
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM database_configs WHERE company_id = ?',
+    'SELECT id FROM database_configs WHERE company_id = @companyId',
     { companyId },
   );
 
   if (existing) {
     // Update existing config
     run(
-      `UPDATE database_configs SET backend = ?, connection_string = ?, updated_at = datetime('now') WHERE company_id = ?`,
+      `UPDATE database_configs SET backend = @backend, connection_string = @connectionString, updated_at = datetime('now') WHERE company_id = @companyId`,
       { backend, connectionString: connectionString || null, companyId },
     );
   } else {
     // Create new config
     run(
-      `INSERT INTO database_configs (id, company_id, backend, connection_string) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO database_configs (id, company_id, backend, connection_string) VALUES (@id, @companyId, @backend, @connectionString)`,
       { id: randomUUID(), companyId, backend, connectionString: connectionString || null },
     );
   }
 
   // Update setup state
   run(
-    `UPDATE setup_state SET step_database = 1, updated_at = datetime('now') WHERE company_id = ?`,
+    `UPDATE setup_state SET step_database = 1, updated_at = datetime('now') WHERE company_id = @companyId`,
     { companyId },
   );
 
@@ -135,14 +135,14 @@ router.post('/branding', async (req: Request, res: Response) => {
 
   run(
     `UPDATE companies
-     SET name = ?, theme_style = ?, primary_color = ?, logo_url = ?, updated_at = datetime('now')
-     WHERE id = ?`,
+     SET name = @name, theme_style = @themeStyle, primary_color = @primaryColor, logo_url = @logoUrl, updated_at = datetime('now')
+     WHERE id = @companyId`,
     { name, themeStyle, primaryColor: primaryColor || null, logoUrl: logoUrl || null, companyId },
   );
 
   // Update setup state
   run(
-    `UPDATE setup_state SET step_branding = 1, updated_at = datetime('now') WHERE company_id = ?`,
+    `UPDATE setup_state SET step_branding = 1, updated_at = datetime('now') WHERE company_id = @companyId`,
     { companyId },
   );
 
@@ -168,30 +168,33 @@ router.post('/model-provider', async (req: Request, res: Response) => {
   const { role, provider, endpointUrl, apiKey, modelName } = result.data;
   const companyId = req.auth!.companyId;
 
+  // Encrypt API key at rest (#8) — only for non-empty keys
+  const encryptedApiKey = apiKey ? encryptApiKey(apiKey, companyId) : null;
+
   // Check if this role already has a config
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM model_provider_configs WHERE company_id = ? AND role = ?',
+    'SELECT id FROM model_provider_configs WHERE company_id = @companyId AND role = @role',
     { companyId, role },
   );
 
   if (existing) {
     run(
       `UPDATE model_provider_configs
-       SET provider = ?, endpoint_url = ?, api_key = ?, model_name = ?, updated_at = datetime('now')
-       WHERE company_id = ? AND role = ?`,
-      { provider, endpointUrl: endpointUrl || null, apiKey: apiKey || null, modelName, companyId, role },
+       SET provider = @provider, endpoint_url = @endpointUrl, api_key = @apiKey, model_name = @modelName, updated_at = datetime('now')
+       WHERE company_id = @companyId AND role = @role`,
+      { provider, endpointUrl: endpointUrl || null, apiKey: encryptedApiKey, modelName, companyId, role },
     );
   } else {
     run(
       `INSERT INTO model_provider_configs (id, company_id, role, provider, endpoint_url, api_key, model_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      { id: randomUUID(), companyId, role, provider, endpointUrl: endpointUrl || null, apiKey: apiKey || null, modelName },
+       VALUES (@id, @companyId, @role, @provider, @endpointUrl, @apiKey, @modelName)`,
+      { id: randomUUID(), companyId, role, provider, endpointUrl: endpointUrl || null, apiKey: encryptedApiKey, modelName },
     );
   }
 
   // Update setup state
   run(
-    `UPDATE setup_state SET step_model_provider = 1, updated_at = datetime('now') WHERE company_id = ?`,
+    `UPDATE setup_state SET step_model_provider = 1, updated_at = datetime('now') WHERE company_id = @companyId`,
     { companyId },
   );
 
@@ -219,7 +222,7 @@ router.post('/interviewer', async (req: Request, res: Response) => {
 
   // Check for duplicate email
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM interviewers WHERE company_id = ? AND email = ?',
+    'SELECT id FROM interviewers WHERE company_id = @companyId AND email = @email',
     { companyId, email },
   );
   if (existing) {
@@ -238,13 +241,17 @@ router.post('/interviewer', async (req: Request, res: Response) => {
   transaction(() => {
     run(
       `INSERT INTO interviewers (id, company_id, email, name, password_hash, public_key)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES (@id, @companyId, @email, @name, @password_hash, @public_key)`,
       { id: interviewerId, companyId, email, name, password_hash: passwordHash, public_key: publicKey },
     );
 
+    // Generate and store per-interviewer encryption key (§2: key hierarchy)
+    const interviewerEncryptionKey = generateInterviewerKey();
+    storeInterviewerKey(interviewerId, companyId, interviewerEncryptionKey);
+
     for (const positionId of positionIds) {
       run(
-        'INSERT OR IGNORE INTO interviewer_positions (interviewer_id, position_id) VALUES (?, ?)',
+        'INSERT OR IGNORE INTO interviewer_positions (interviewer_id, position_id) VALUES (@interviewerId, @positionId)',
         { interviewerId, positionId },
       );
     }
@@ -252,7 +259,7 @@ router.post('/interviewer', async (req: Request, res: Response) => {
     if (roundIds) {
       for (const roundId of roundIds) {
         run(
-          'INSERT OR IGNORE INTO interviewer_rounds (interviewer_id, round_id) VALUES (?, ?)',
+          'INSERT OR IGNORE INTO interviewer_rounds (interviewer_id, round_id) VALUES (@interviewerId, @roundId)',
           { interviewerId, roundId },
         );
       }
@@ -268,14 +275,14 @@ router.post('/interviewer', async (req: Request, res: Response) => {
     };
     run(
       `INSERT INTO client_soft_lock_artifacts (id, interviewer_id, encrypted_config)
-       VALUES (?, ?, ?)`,
+       VALUES (@id, @interviewerId, @encrypted_config)`,
       { id: randomUUID(), interviewerId, encrypted_config: JSON.stringify(softLockConfig) },
     );
   });
 
   // Update setup state
   run(
-    `UPDATE setup_state SET step_interviewers = 1, updated_at = datetime('now') WHERE company_id = ?`,
+    `UPDATE setup_state SET step_interviewers = 1, updated_at = datetime('now') WHERE company_id = @companyId`,
     { companyId },
   );
 
@@ -293,14 +300,30 @@ router.post('/interviewer', async (req: Request, res: Response) => {
   });
 });
 
+// POST /api/v1/setup/skip-interviewers — Skip interviewer provisioning step (#6)
+router.post('/skip-interviewers', async (req: Request, res: Response) => {
+  const companyId = req.auth!.companyId;
+
+  run(
+    `UPDATE setup_state SET step_interviewers = 1, updated_at = datetime('now') WHERE company_id = @companyId`,
+    { companyId },
+  );
+
+  res.json({
+    success: true,
+    message: 'Interviewer provisioning skipped. You can add interviewers later from the admin dashboard.',
+    data: { skipped: true },
+  });
+});
+
 // GET /api/v1/setup/interviewer/download/:id — Download soft-locked client
 router.get('/interviewer/download/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const artifact = getOne<{ id: string; encrypted_config: string }>(
     `SELECT id, encrypted_config FROM client_soft_lock_artifacts
-     WHERE interviewer_id = ?`,
+     WHERE interviewer_id = @interviewerId`,
     { interviewerId: id },
   );
 
@@ -311,7 +334,7 @@ router.get('/interviewer/download/:id', async (req: Request, res: Response) => {
 
   // Verify the interviewer belongs to this company
   const interviewer = getOne<{ id: string; company_id: string }>(
-    'SELECT id, company_id FROM interviewers WHERE id = ?',
+    'SELECT id, company_id FROM interviewers WHERE id = @id',
     { id },
   );
   if (!interviewer || interviewer.company_id !== companyId) {

@@ -176,6 +176,40 @@
         </div>
       </div>
 
+      <!-- Applicant Detail -->
+      <div id="section-applicant-detail" class="section" style="display:none;">
+        <div class="header">
+          <h1>Applicant Detail</h1>
+          <button class="btn btn-sm" style="background:#64748b;" onclick="showSection('applicants')">Back to List</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="card">
+            <h3>Applicant Info</h3>
+            <div id="detail-info"></div>
+          </div>
+          <div class="card">
+            <h3>AI Analysis</h3>
+            <div id="detail-result"></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Tags</h3>
+          <div id="detail-tags"></div>
+        </div>
+        <div class="card">
+          <h3>Notes</h3>
+          <div id="detail-notes"></div>
+        </div>
+        <div class="card">
+          <h3>Messages</h3>
+          <div id="detail-messages"></div>
+        </div>
+        <div class="card" style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-success" onclick="updateDetailStatus('approved')">Approve</button>
+          <button class="btn btn-sm btn-danger" onclick="updateDetailStatus('rejected')">Reject</button>
+        </div>
+      </div>
+
       <!-- Rounds -->
       <div id="section-rounds" class="section" style="display:none;">
         <div class="header">
@@ -330,7 +364,7 @@
       document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
       document.getElementById(`section-${name}`).style.display = 'block';
       document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
-      event.target.classList.add('active');
+      if (event && event.target) event.target.classList.add('active');
       const loaders = { dashboard: loadDashboard, positions: loadPositions, interviewers: loadInterviewers, applicants: loadApplicants, rounds: loadRounds, tags: loadTags, features: loadFeatures, settings: loadSettings };
       if (loaders[name]) loaders[name]();
     }
@@ -389,6 +423,20 @@
 
     // --- Applicants ---
     async function loadApplicants() {
+      // Populate position filter if empty
+      const posSelect = document.getElementById('filter-position');
+      if (posSelect.options.length <= 1) {
+        const posData = await apiCall('GET', '/positions');
+        if (posData.success) {
+          posData.data.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            posSelect.appendChild(opt);
+          });
+        }
+      }
+
       const status = document.getElementById('filter-status').value;
       const pos = document.getElementById('filter-position').value;
       let q = '/applicants?pageSize=50';
@@ -396,7 +444,72 @@
       if (pos) q += `&positionId=${pos}`;
       const data = await apiCall('GET', q);
       if (!data.success) return;
-      document.getElementById('applicants-list').innerHTML = data.data.items.map(a => `<tr><td>${a.name}</td><td>${a.email}</td><td>${a.position_name || '-'}</td><td><span class="badge badge-${statusColor(a.status)}">${a.status}</span></td><td>${a.assigned_interviewer_id ? a.assigned_interviewer_id.slice(0,8)+'...' : '-'}</td><td>${new Date(a.created_at).toLocaleDateString()}</td><td><button class="btn btn-sm btn-success" onclick="updateStatus('${a.id}','approved')">Approve</button> <button class="btn btn-sm btn-danger" onclick="updateStatus('${a.id}','rejected')">Reject</button></td></tr>`).join('');
+      document.getElementById('applicants-list').innerHTML = data.data.items.map(a => `<tr class="clickable" style="cursor:pointer;" onclick="viewApplicant('${a.id}')"><td>${a.name}</td><td>${a.email}</td><td>${a.position_name || '-'}</td><td><span class="badge badge-${statusColor(a.status)}">${a.status}</span></td><td>${a.assigned_interviewer_id ? a.assigned_interviewer_id.slice(0,8)+'...' : '-'}</td><td>${new Date(a.created_at).toLocaleDateString()}</td><td><button class="btn btn-sm btn-success" onclick="event.stopPropagation();updateStatus('${a.id}','approved')">Approve</button> <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();updateStatus('${a.id}','rejected')">Reject</button></td></tr>`).join('');
+    }
+
+    let currentDetailId = null;
+
+    async function viewApplicant(id) {
+      currentDetailId = id;
+      const data = await apiCall('GET', `/applicants/${id}`);
+      if (!data.success) return;
+
+      const { applicant: app, result } = data.data;
+
+      // Info
+      document.getElementById('detail-info').innerHTML = `
+        <p><strong>Name:</strong> ${app.name}</p>
+        <p><strong>Email:</strong> ${app.email}</p>
+        <p><strong>Position:</strong> ${app.position_name || '-'}</p>
+        <p><strong>Status:</strong> <span class="badge badge-${statusColor(app.status)}">${app.status}</span></p>
+        <p><strong>Applied:</strong> ${new Date(app.created_at).toLocaleString()}</p>
+        ${app.supplementary_info ? `<p><strong>Supplementary:</strong> ${app.supplementary_info}</p>` : ''}
+      `;
+
+      // AI Result
+      if (result) {
+        const scores = (result.criteriaScores || []).map(s =>
+          `<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:13px;"><span>${s.criterion}</span><span>${s.score}/100 (${s.grade})</span></div><div style="background:#e2e8f0;border-radius:4px;height:6px;"><div style="background:${s.grade === 'excellent' ? '#22c55e' : s.grade === 'good' ? '#3b82f6' : s.grade === 'average' ? '#f59e0b' : '#ef4444'};height:100%;width:${s.score}%;border-radius:4px;"></div></div><div style="font-size:12px;color:#64748b;margin-top:2px;">${s.justification}</div></div>`
+        ).join('');
+        document.getElementById('detail-result').innerHTML = `
+          <p><strong>Verdict:</strong> ${result.overallVerdict}</p>
+          <p><strong>Grade:</strong> <span class="badge badge-${result.overallGrade === 'excellent' || result.overallGrade === 'good' ? 'green' : result.overallGrade === 'average' ? 'yellow' : 'red'}">${result.overallGrade}</span></p>
+          <p><strong>Summary:</strong> ${result.summary}</p>
+          <p><strong>Recommendation:</strong> ${result.recommendation}</p>
+          ${result.lowConfidence ? '<p style="color:#f59e0b;font-weight:500;">⚠ Low confidence — verification failed after 3 attempts</p>' : ''}
+          <h4 style="margin-top:12px;margin-bottom:8px;">Criteria Scores</h4>
+          ${scores}
+        `;
+      } else {
+        document.getElementById('detail-result').innerHTML = '<p style="color:#64748b;">No analysis result yet.</p>';
+      }
+
+      // Tags
+      document.getElementById('detail-tags').innerHTML = (app.tags || []).length > 0
+        ? app.tags.map(t => `<span class="badge" style="background:${t.color}20;color:${t.color};margin-right:4px;">${t.name}</span>`).join('')
+        : '<p style="color:#64748b;">No tags.</p>';
+
+      // Notes
+      document.getElementById('detail-notes').innerHTML = (app.notes || []).length > 0
+        ? app.notes.map(n => `<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;"><p style="font-size:13px;">${n.content}</p><p style="font-size:11px;color:#94a3b8;">${new Date(n.created_at).toLocaleString()}</p></div>`).join('')
+        : '<p style="color:#64748b;">No notes.</p>';
+
+      // Messages (admin sees real interviewer names)
+      const msgData = await apiCall('GET', `/messages/${id}`);
+      if (msgData.success && msgData.data.length > 0) {
+        document.getElementById('detail-messages').innerHTML = msgData.data.map(m => `<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;"><p style="font-size:13px;"><strong>${m.senderName}</strong> <span style="color:#94a3b8;font-size:11px;">${new Date(m.created_at).toLocaleString()}</span></p><p style="font-size:13px;margin-top:4px;">${m.content}</p></div>`).join('');
+      } else {
+        document.getElementById('detail-messages').innerHTML = '<p style="color:#64748b;">No messages.</p>';
+      }
+
+      showSection('applicant-detail');
+    }
+
+    async function updateDetailStatus(status) {
+      if (!currentDetailId) return;
+      await apiCall('PATCH', `/applicants/${currentDetailId}/status`, { status });
+      showNotice(`Applicant ${status}`, 'success');
+      viewApplicant(currentDetailId);
     }
 
     async function updateStatus(id, status) { await apiCall('PATCH', `/applicants/${id}/status`, { status }); loadApplicants(); loadDashboard(); }
@@ -442,11 +555,33 @@
 
     async function toggleFeature(feature, enabled) { await apiCall('PATCH', '/features', { feature, isEnabled: enabled }); loadFeatures(); }
 
+    // --- Notifications ---
+    function showNotice(message, type = 'info') {
+      const colors = { success: '#22c55e', error: '#ef4444', info: '#3b82f6', warning: '#f59e0b' };
+      const bg = colors[type] || colors.info;
+      const el = document.createElement('div');
+      el.style.cssText = `position:fixed;top:16px;right:16px;background:${bg};color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:opacity 0.3s;`;
+      el.textContent = message;
+      document.body.appendChild(el);
+      setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+    }
+
     // --- Settings ---
     async function loadSettings() {
       const data = await apiCall('GET', '/setup/status');
       if (!data.success) return;
-      document.getElementById('setup-status').innerHTML = data.data.steps.map(s => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;"><span style="width:20px;height:20px;border-radius:50%;background:${s.isCompleted ? '#22c55e' : '#e2e8f0'};display:flex;align-items:center;justify-content:center;color:white;font-size:12px;">${s.isCompleted ? '✓' : ''}</span><span>${s.name}</span></div>`).join('');
+      document.getElementById('setup-status').innerHTML = data.data.steps.map(s => {
+        const skipBtn = (s.step === 5 && !s.isCompleted)
+          ? ` <button class="btn btn-sm" style="background:#f59e0b;color:#fff;padding:2px 8px;font-size:11px;" onclick="skipInterviewers()">Skip for now</button>`
+          : '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;"><span style="width:20px;height:20px;border-radius:50%;background:${s.isCompleted ? '#22c55e' : '#e2e8f0'};display:flex;align-items:center;justify-content:center;color:white;font-size:12px;">${s.isCompleted ? '✓' : ''}</span><span>${s.name}</span>${skipBtn}</div>`;
+      }).join('');
+    }
+
+    async function skipInterviewers() {
+      if (!confirm('Skip interviewer provisioning? You can add interviewers later from the Interviewers tab.')) return;
+      const data = await apiCall('POST', '/setup/skip-interviewers');
+      if (data.success) { loadSettings(); showNotice('Interviewer provisioning skipped', 'success'); }
     }
   </script>
 </body>

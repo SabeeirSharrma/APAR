@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { getOne, getMany, run } from '../db/index.js';
-import { decryptResult } from '../lib/encryption.js';
+import { decryptResult, decryptResultAsAdmin } from '../lib/encryption.js';
 import { requireAuth } from '../middleware/auth.js';
 import { statusUpdateSchema } from '../lib/validation.js';
-import { sendApprovalEmail, sendRejectionEmail } from '../lib/email.js';
+import { sendApprovalEmail, sendRejectionEmail, sendRoundAdvancementEmail } from '../lib/email.js';
 
 const router = Router();
 
@@ -86,7 +86,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 // GET /api/v1/applicants/:id — Get applicant details with decrypted result
 router.get('/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   interface ApplicationDetailRow {
@@ -110,7 +110,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     `SELECT a.*, p.name as position_name, p.criteria
      FROM applications a
      JOIN positions p ON a.position_id = p.id
-     WHERE a.id = ? AND a.company_id = ?`,
+     WHERE a.id = @id AND a.company_id = @companyId`,
     { id, companyId },
   );
 
@@ -124,7 +124,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     `SELECT t.id, t.name, t.color, t.scope
      FROM tags t
      JOIN applicant_tags at ON t.id = at.tag_id
-     WHERE at.application_id = ?`,
+     WHERE at.application_id = @applicationId`,
     { applicationId: id },
   );
 
@@ -132,7 +132,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   const notes = getMany<{ id: string; interviewer_id: string; content: string; created_at: string }>(
     `SELECT id, interviewer_id, content, created_at
      FROM notes
-     WHERE application_id = ?
+     WHERE application_id = @applicationId
      ORDER BY created_at DESC`,
     { applicationId: id },
   );
@@ -145,13 +145,15 @@ router.get('/:id', async (req: Request, res: Response) => {
     created_at: string;
   }
   const resultRow = getOne<ResultRow>(
-    'SELECT encrypted_data, low_confidence, verification_attempts, created_at FROM results WHERE application_id = ?',
+    'SELECT encrypted_data, low_confidence, verification_attempts, created_at FROM results WHERE application_id = @applicationId',
     { applicationId: id },
   );
 
   let result = null;
   if (resultRow) {
-    result = decryptResult(resultRow.encrypted_data);
+    // Per-interviewer key: try interviewer's key first, fall back to master key
+    const interviewerId = app.assigned_interviewer_id || '';
+    result = decryptResult(resultRow.encrypted_data, interviewerId, app.company_id);
     if (result) {
       (result as Record<string, unknown>).lowConfidence = resultRow.low_confidence === 1;
       (result as Record<string, unknown>).verificationAttempts = resultRow.verification_attempts;
@@ -185,7 +187,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
   const { status } = result.data;
 
   const existing = getOne<{ id: string; company_id: string }>(
-    'SELECT id, company_id FROM applications WHERE id = ?',
+    'SELECT id, company_id FROM applications WHERE id = @id',
     { id },
   );
   if (!existing || existing.company_id !== companyId) {
@@ -194,13 +196,68 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
   }
 
   run(
-    `UPDATE applications SET status = ?, updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE applications SET status = @status, updated_at = datetime('now') WHERE id = @id`,
     { status, id },
   );
 
   // Send email notification to applicant (§13)
   if (status === 'approved') {
     sendApprovalEmail(id).catch((err) => console.error('Failed to send approval email:', err));
+
+    // #10: If company is round-based, auto-advance applicant to next round
+    const app = getOne<{ current_round_id: string | null }>(
+      'SELECT current_round_id FROM applications WHERE id = @id',
+      { id },
+    );
+    if (app?.current_round_id) {
+      const currentRound = getOne<{ round_number: number }>(
+        'SELECT round_number FROM rounds WHERE id = @roundId',
+        { roundId: app.current_round_id },
+      );
+      if (currentRound) {
+        const nextRound = getOne<{ id: string }>(
+          `SELECT id FROM rounds
+           WHERE company_id = @companyId AND round_number = @roundNumber
+           ORDER BY round_number ASC LIMIT 1`,
+          { companyId, roundNumber: currentRound.round_number + 1 },
+        );
+        if (nextRound) {
+          // Find interviewer in next round's pool
+          const candidates = getMany<{ id: string }>(
+            `SELECT i.id FROM interviewers i
+             JOIN interviewer_rounds ir ON i.id = ir.interviewer_id
+             WHERE ir.round_id = @roundId
+             ORDER BY (
+               SELECT COUNT(*) FROM applications a
+               WHERE a.assigned_interviewer_id = i.id
+                 AND a.current_round_id = @currentRoundId
+                 AND a.status NOT IN ('approved', 'rejected')
+             ) ASC`,
+            { roundId: nextRound.id, currentRoundId: nextRound.id },
+          );
+
+          const newInterviewerId = candidates.length > 0 ? candidates[0].id : null;
+
+          run(
+            `UPDATE applications
+             SET current_round_id = @currentRoundId, assigned_interviewer_id = @interviewerId, status = 'queued', updated_at = datetime('now')
+             WHERE id = @id`,
+            { currentRoundId: nextRound.id, interviewerId: newInterviewerId, id },
+          );
+
+          // Send advancement email (#10)
+          const nextRoundName = getOne<{ name: string }>(
+            'SELECT name FROM rounds WHERE id = @roundId',
+            { roundId: nextRound.id },
+          );
+          if (nextRoundName) {
+            sendRoundAdvancementEmail(id, nextRoundName.name).catch((err) =>
+              console.error('Failed to send round advancement email:', err),
+            );
+          }
+        }
+      }
+    }
   } else if (status === 'rejected') {
     sendRejectionEmail(id).catch((err) => console.error('Failed to send rejection email:', err));
   }
@@ -218,7 +275,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
 
 // POST /api/v1/applicants/:id/tags — Add tag to applicant
 router.post('/:id/tags', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
   const { tagId } = req.body;
 
@@ -229,7 +286,7 @@ router.post('/:id/tags', async (req: Request, res: Response) => {
 
   // Verify application belongs to company
   const app = getOne<{ id: string; company_id: string }>(
-    'SELECT id, company_id FROM applications WHERE id = ?',
+    'SELECT id, company_id FROM applications WHERE id = @id',
     { id },
   );
   if (!app || app.company_id !== companyId) {
@@ -239,7 +296,7 @@ router.post('/:id/tags', async (req: Request, res: Response) => {
 
   // Verify tag belongs to company
   const tag = getOne<{ id: string; company_id: string }>(
-    'SELECT id, company_id FROM tags WHERE id = ?',
+    'SELECT id, company_id FROM tags WHERE id = @tagId',
     { tagId },
   );
   if (!tag || tag.company_id !== companyId) {
@@ -248,7 +305,7 @@ router.post('/:id/tags', async (req: Request, res: Response) => {
   }
 
   run(
-    `INSERT OR IGNORE INTO applicant_tags (application_id, tag_id) VALUES (?, ?)`,
+    `INSERT OR IGNORE INTO applicant_tags (application_id, tag_id) VALUES (@applicationId, @tagId)`,
     { applicationId: id, tagId },
   );
 
@@ -257,10 +314,11 @@ router.post('/:id/tags', async (req: Request, res: Response) => {
 
 // DELETE /api/v1/applicants/:id/tags/:tagId — Remove tag from applicant
 router.delete('/:id/tags/:tagId', async (req: Request, res: Response) => {
-  const { id, tagId } = req.params;
+  const id = req.params.id as string;
+  const tagId = req.params.tagId as string;
 
   run(
-    `DELETE FROM applicant_tags WHERE application_id = ? AND tag_id = ?`,
+    `DELETE FROM applicant_tags WHERE application_id = @applicationId AND tag_id = @tagId`,
     { applicationId: id, tagId },
   );
 

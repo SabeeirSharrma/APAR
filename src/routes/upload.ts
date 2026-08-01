@@ -5,6 +5,7 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { run, getOne } from '../db/index.js';
 import { runPipeline, getPipelineStatus } from '../lib/pipeline.js';
+import { sendUploadConfirmation } from '../lib/email.js';
 import { requireAuth } from '../middleware/auth.js';
 import { uploadLimiter } from '../middleware/rateLimit.js';
 
@@ -80,7 +81,7 @@ router.post('/', uploadLimiter, upload.single('resume'), async (req: Request, re
       company_id: string;
     }
     const position = getOne<PositionLookup>(
-      'SELECT id, company_id FROM positions WHERE id = ?',
+      'SELECT id, company_id FROM positions WHERE id = @positionId',
       { positionId },
     );
 
@@ -93,7 +94,7 @@ router.post('/', uploadLimiter, upload.single('resume'), async (req: Request, re
     const applicationId = randomUUID();
     run(
       `INSERT INTO applications (id, position_id, company_id, email, name, resume_path, supplementary_info, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'queued')`,
+       VALUES (@applicationId, @positionId, @companyId, @email, @name, @resumePath, @supplementaryInfo, 'queued')`,
       {
         applicationId,
         positionId: position.id,
@@ -119,6 +120,15 @@ router.post('/', uploadLimiter, upload.single('resume'), async (req: Request, re
         status: 'queued',
       },
     });
+
+    // Send confirmation email to applicant (#5) — fire-and-forget
+    sendUploadConfirmation(
+      applicationId,
+      position.company_id,
+      positionId,
+      applicantEmail,
+      applicantName,
+    ).catch((err) => console.error('Failed to send upload confirmation email:', err));
 
     // Run pipeline asynchronously (fire-and-forget)
     runPipeline({

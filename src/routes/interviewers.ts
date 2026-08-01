@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { getOne, getMany, run, transaction } from '../db/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { createInterviewerSchema, updateInterviewerSchema } from '../lib/validation.js';
-import { generateKeyPair } from '../lib/encryption.js';
+import { generateKeyPair, generateInterviewerKey, storeInterviewerKey, resetInterviewerKey } from '../lib/encryption.js';
 import { hashPassword } from '../lib/auth.js';
 
 const router = Router();
@@ -46,12 +46,12 @@ router.get('/', async (req: Request, res: Response) => {
   // Enrich with position count and workload
   const enriched = interviewers.map((i) => {
     const posCount = getOne<{ count: number }>(
-      'SELECT COUNT(*) as count FROM interviewer_positions WHERE interviewer_id = ?',
+      'SELECT COUNT(*) as count FROM interviewer_positions WHERE interviewer_id = @id',
       { id: i.id },
     );
     const workload = getOne<{ count: number }>(
       `SELECT COUNT(*) as count FROM applications
-       WHERE assigned_interviewer_id = ? AND status NOT IN ('approved', 'rejected')`,
+       WHERE assigned_interviewer_id = @id AND status NOT IN ('approved', 'rejected')`,
       { id: i.id },
     );
     return {
@@ -66,7 +66,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 // GET /api/v1/interviewers/:id — Get interviewer details with workload
 router.get('/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const interviewer = getOne<{
@@ -77,7 +77,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     created_at: string;
     updated_at: string;
   }>(
-    'SELECT id, email, name, public_key, created_at, updated_at FROM interviewers WHERE id = ? AND company_id = ?',
+    'SELECT id, email, name, public_key, created_at, updated_at FROM interviewers WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
 
@@ -90,7 +90,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   const positions = getMany<{ id: string; name: string }>(
     `SELECT p.id, p.name FROM positions p
      JOIN interviewer_positions ip ON p.id = ip.position_id
-     WHERE ip.interviewer_id = ?`,
+     WHERE ip.interviewer_id = @id`,
     { id },
   );
 
@@ -98,7 +98,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   const rounds = getMany<{ id: string; name: string; round_number: number }>(
     `SELECT r.id, r.name, r.round_number FROM rounds r
      JOIN interviewer_rounds ir ON r.id = ir.round_id
-     WHERE ir.interviewer_id = ?`,
+     WHERE ir.interviewer_id = @id`,
     { id },
   );
 
@@ -107,8 +107,8 @@ router.get('/:id', async (req: Request, res: Response) => {
     `SELECT a.position_id, p.name as position_name, COUNT(*) as count
      FROM applications a
      JOIN positions p ON a.position_id = p.id
-     WHERE a.assigned_interviewer_id = ?
-       AND a.status NOT IN ('approved', 'rejected')
+     WHERE a.assigned_interviewer_id = @id
+        AND a.status NOT IN ('approved', 'rejected')
      GROUP BY a.position_id`,
     { id },
   );
@@ -144,7 +144,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
 
   // Check for duplicate email
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM interviewers WHERE company_id = ? AND email = ?',
+    'SELECT id FROM interviewers WHERE company_id = @companyId AND email = @email',
     { companyId, email },
   );
   if (existing) {
@@ -168,14 +168,18 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
     // Create interviewer
     run(
       `INSERT INTO interviewers (id, company_id, email, name, password_hash, public_key)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES (@id, @companyId, @email, @name, @password_hash, @public_key)`,
       { id: interviewerId, companyId, email, name, password_hash: passwordHash, public_key: publicKey },
     );
+
+    // Generate and store per-interviewer encryption key (§2: key hierarchy)
+    const interviewerEncryptionKey = generateInterviewerKey();
+    storeInterviewerKey(interviewerId, companyId, interviewerEncryptionKey);
 
     // Assign to positions
     for (const positionId of positionIds) {
       run(
-        'INSERT OR IGNORE INTO interviewer_positions (interviewer_id, position_id) VALUES (?, ?)',
+        'INSERT OR IGNORE INTO interviewer_positions (interviewer_id, position_id) VALUES (@interviewerId, @positionId)',
         { interviewerId, positionId },
       );
     }
@@ -184,7 +188,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
     if (roundIds) {
       for (const roundId of roundIds) {
         run(
-          'INSERT OR IGNORE INTO interviewer_rounds (interviewer_id, round_id) VALUES (?, ?)',
+          'INSERT OR IGNORE INTO interviewer_rounds (interviewer_id, round_id) VALUES (@interviewerId, @roundId)',
           { interviewerId, roundId },
         );
       }
@@ -200,7 +204,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
     };
     run(
       `INSERT INTO client_soft_lock_artifacts (id, interviewer_id, encrypted_config)
-       VALUES (?, ?, ?)`,
+       VALUES (@id, @interviewerId, @encrypted_config)`,
       { id: randomUUID(), interviewerId, encrypted_config: JSON.stringify(softLockConfig) },
     );
   });
@@ -222,7 +226,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
 
 // PATCH /api/v1/interviewers/:id — Update interviewer details
 router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const result = updateInterviewerSchema.safeParse(req.body);
@@ -236,7 +240,7 @@ router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Res
   }
 
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM interviewers WHERE id = ? AND company_id = ?',
+    'SELECT id FROM interviewers WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!existing) {
@@ -251,7 +255,7 @@ router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Res
   if (email !== undefined) {
     // Check for duplicate email
     const dup = getOne<{ id: string }>(
-      'SELECT id FROM interviewers WHERE company_id = ? AND email = ? AND id != ?',
+      'SELECT id FROM interviewers WHERE company_id = @companyId AND email = @email AND id != @id',
       { companyId, email, id },
     );
     if (dup) {
@@ -273,11 +277,11 @@ router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Res
 
 // DELETE /api/v1/interviewers/:id — Delete interviewer and reassign applicants
 router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const interviewer = getOne<{ id: string }>(
-    'SELECT id FROM interviewers WHERE id = ? AND company_id = ?',
+    'SELECT id FROM interviewers WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!interviewer) {
@@ -288,8 +292,8 @@ router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Re
   // Find all active applicants assigned to this interviewer
   const activeApps = getMany<{ id: string; position_id: string }>(
     `SELECT id, position_id FROM applications
-     WHERE assigned_interviewer_id = ?
-       AND status NOT IN ('approved', 'rejected')`,
+     WHERE assigned_interviewer_id = @id
+        AND status NOT IN ('approved', 'rejected')`,
     { id },
   );
 
@@ -300,11 +304,11 @@ router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Re
       const candidates = getMany<{ id: string }>(
         `SELECT i.id FROM interviewers i
          JOIN interviewer_positions ip ON i.id = ip.interviewer_id
-         WHERE ip.position_id = ? AND i.id != ?
+         WHERE ip.position_id = @positionId AND i.id != @excludeId
          ORDER BY (
            SELECT COUNT(*) FROM applications a
            WHERE a.assigned_interviewer_id = i.id
-             AND a.position_id = ?
+             AND a.position_id = @positionId
              AND a.status NOT IN ('approved', 'rejected')
          ) ASC`,
         { positionId: app.position_id, excludeId: id },
@@ -312,7 +316,7 @@ router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Re
 
       if (candidates.length > 0) {
         run(
-          `UPDATE applications SET assigned_interviewer_id = ?, updated_at = datetime('now') WHERE id = ?`,
+          `UPDATE applications SET assigned_interviewer_id = @interviewerId, updated_at = datetime('now') WHERE id = @applicationId`,
           { interviewerId: candidates[0].id, applicationId: app.id },
         );
       }
@@ -320,11 +324,11 @@ router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Re
     }
 
     // Remove interviewer from positions and rounds
-    run('DELETE FROM interviewer_positions WHERE interviewer_id = ?', { id });
-    run('DELETE FROM interviewer_rounds WHERE interviewer_id = ?', { id });
+    run('DELETE FROM interviewer_positions WHERE interviewer_id = @id', { id });
+    run('DELETE FROM interviewer_rounds WHERE interviewer_id = @id', { id });
 
     // Delete the interviewer
-    run('DELETE FROM interviewers WHERE id = ?', { id });
+    run('DELETE FROM interviewers WHERE id = @id', { id });
   });
 
   res.json({
@@ -336,7 +340,7 @@ router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Re
 
 // POST /api/v1/interviewers/:id/positions — Assign interviewer to position
 router.post('/:id/positions', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
   const { positionId } = req.body;
 
@@ -346,7 +350,7 @@ router.post('/:id/positions', requireRole('company_admin'), async (req: Request,
   }
 
   const interviewer = getOne<{ id: string }>(
-    'SELECT id FROM interviewers WHERE id = ? AND company_id = ?',
+    'SELECT id FROM interviewers WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!interviewer) {
@@ -355,7 +359,7 @@ router.post('/:id/positions', requireRole('company_admin'), async (req: Request,
   }
 
   const position = getOne<{ id: string }>(
-    'SELECT id FROM positions WHERE id = ? AND company_id = ?',
+    'SELECT id FROM positions WHERE id = @positionId AND company_id = @companyId',
     { positionId, companyId },
   );
   if (!position) {
@@ -364,7 +368,7 @@ router.post('/:id/positions', requireRole('company_admin'), async (req: Request,
   }
 
   run(
-    'INSERT OR IGNORE INTO interviewer_positions (interviewer_id, position_id) VALUES (?, ?)',
+    'INSERT OR IGNORE INTO interviewer_positions (interviewer_id, position_id) VALUES (@interviewerId, @positionId)',
     { interviewerId: id, positionId },
   );
 
@@ -373,12 +377,13 @@ router.post('/:id/positions', requireRole('company_admin'), async (req: Request,
 
 // DELETE /api/v1/interviewers/:id/positions/:positionId — Remove interviewer from position
 router.delete('/:id/positions/:positionId', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id, positionId } = req.params;
+  const id = req.params.id as string;
+  const positionId = req.params.positionId as string;
   const { companyId } = req.auth!;
 
   // Verify interviewer belongs to company
   const interviewer = getOne<{ id: string }>(
-    'SELECT id FROM interviewers WHERE id = ? AND company_id = ?',
+    'SELECT id FROM interviewers WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!interviewer) {
@@ -387,15 +392,15 @@ router.delete('/:id/positions/:positionId', requireRole('company_admin'), async 
   }
 
   run(
-    'DELETE FROM interviewer_positions WHERE position_id = ? AND interviewer_id = ?',
+    'DELETE FROM interviewer_positions WHERE position_id = @positionId AND interviewer_id = @interviewerId',
     { positionId, interviewerId: id },
   );
 
   // Reassign applicants from this interviewer in this position to others
   const affectedApps = getMany<{ id: string }>(
     `SELECT id FROM applications
-     WHERE assigned_interviewer_id = ? AND position_id = ?
-       AND status NOT IN ('approved', 'rejected')`,
+     WHERE assigned_interviewer_id = @interviewerId AND position_id = @positionId
+        AND status NOT IN ('approved', 'rejected')`,
     { id, positionId },
   );
 
@@ -403,11 +408,11 @@ router.delete('/:id/positions/:positionId', requireRole('company_admin'), async 
     const candidates = getMany<{ id: string }>(
       `SELECT i.id FROM interviewers i
        JOIN interviewer_positions ip ON i.id = ip.interviewer_id
-       WHERE ip.position_id = ? AND i.id != ?
+       WHERE ip.position_id = @positionId AND i.id != @excludeId
        ORDER BY (
          SELECT COUNT(*) FROM applications a
          WHERE a.assigned_interviewer_id = i.id
-           AND a.position_id = ?
+           AND a.position_id = @positionId
            AND a.status NOT IN ('approved', 'rejected')
        ) ASC`,
       { positionId, excludeId: id },
@@ -415,7 +420,7 @@ router.delete('/:id/positions/:positionId', requireRole('company_admin'), async 
 
     if (candidates.length > 0) {
       run(
-        `UPDATE applications SET assigned_interviewer_id = ?, updated_at = datetime('now') WHERE id = ?`,
+        `UPDATE applications SET assigned_interviewer_id = @interviewerId, updated_at = datetime('now') WHERE id = @applicationId`,
         { interviewerId: candidates[0].id, applicationId: app.id },
       );
     }
@@ -430,11 +435,11 @@ router.delete('/:id/positions/:positionId', requireRole('company_admin'), async 
 
 // GET /api/v1/interviewers/:id/workload — Get interviewer's current workload per position
 router.get('/:id/workload', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const interviewer = getOne<{ id: string }>(
-    'SELECT id FROM interviewers WHERE id = ? AND company_id = ?',
+    'SELECT id FROM interviewers WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!interviewer) {
@@ -446,8 +451,8 @@ router.get('/:id/workload', async (req: Request, res: Response) => {
     `SELECT a.position_id, p.name as position_name, COUNT(*) as assigned_count
      FROM applications a
      JOIN positions p ON a.position_id = p.id
-     WHERE a.assigned_interviewer_id = ?
-       AND a.status NOT IN ('approved', 'rejected')
+     WHERE a.assigned_interviewer_id = @id
+        AND a.status NOT IN ('approved', 'rejected')
      GROUP BY a.position_id`,
     { id },
   );
@@ -466,12 +471,12 @@ router.get('/:id/workload', async (req: Request, res: Response) => {
 
 // GET /api/v1/interviewers/:id/assigned-applicants — List applicants assigned to this interviewer
 router.get('/:id/assigned-applicants', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
   const { status, page = '1', pageSize = '20' } = req.query;
 
   const interviewer = getOne<{ id: string }>(
-    'SELECT id FROM interviewers WHERE id = ? AND company_id = ?',
+    'SELECT id FROM interviewers WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
   if (!interviewer) {
@@ -521,6 +526,34 @@ router.get('/:id/assigned-applicants', async (req: Request, res: Response) => {
       page: parseInt(page as string) || 1,
       pageSize: limit,
       totalPages: Math.ceil(total / limit),
+    },
+  });
+});
+
+// POST /api/v1/interviewers/:id/reset-key — Reset interviewer's encryption key (#2)
+router.post('/:id/reset-key', async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { companyId } = req.auth!;
+
+  // Verify interviewer exists and belongs to this company
+  const interviewer = getOne<{ id: string }>(
+    'SELECT id FROM interviewers WHERE id = @id AND company_id = @companyId',
+    { id, companyId },
+  );
+  if (!interviewer) {
+    res.status(404).json({ success: false, error: 'Interviewer not found' });
+    return;
+  }
+
+  // Reset the interviewer's encryption key (§2: admin recovery)
+  const newKey = resetInterviewerKey(id, companyId);
+
+  res.json({
+    success: true,
+    message: 'Interviewer encryption key has been reset. Old results remain encrypted with the previous key.',
+    data: {
+      interviewerId: id,
+      newKeyPreview: `${newKey.slice(0, 4)}...${newKey.slice(-4)}`, // Show partial key for confirmation
     },
   });
 });

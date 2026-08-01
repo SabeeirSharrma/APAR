@@ -108,8 +108,15 @@ Delivered to the interviewer as:
   0–100 score, self-assigned by the main model, with its own color grade.
 
 **Color grading** — light mode, solid color bands (no gradient) — flat, corporate
-look rather than a smooth spectrum. Exact score thresholds for each band still TBD,
-but the visual style (flat/banded, not gradient) is locked.
+look rather than a smooth spectrum. Score thresholds locked:
+
+| Grade | Score Range | Color Label |
+|-------|------------|-------------|
+| A | 80–100 | excellent |
+| B | 70–80 | good |
+| C | 60–70 | average |
+| D | 55–60 | below-average |
+| F | <55 | poor |
 
 ## 6. Encryption & Access Control
 
@@ -145,12 +152,12 @@ but the visual style (flat/banded, not gradient) is locked.
   is inapplicable — self-hosted instances have company admins and interviewers
   only.
 
-**Open decisions:**
-- Exact key hierarchy giving company admins standing access without weakening the
-  "encrypted, not plaintext-at-rest" guarantee (e.g. company master key that can
-  derive/unwrap per-interviewer keys, rather than admins holding a raw copy of
-  every result).
-- If/when a SaaS version is built: the exact permission-granting mechanism a
+**Resolved decisions:**
+- ✅ **Key hierarchy**: Each interviewer gets a randomly generated 32-byte
+  encryption key. Keys stored encrypted with company master key. Admins can
+  regenerate (reset) but never define/choose. Results encrypted per-interviewer
+  key. Admin recovery via company master key (`decryptResultAsAdmin`).
+- **If/when a SaaS version is built**: the exact permission-granting mechanism a
   company would use to authorize platform admin override (explicit toggle, a
   scoped/time-limited grant, per-incident approval, etc.) — deferred until that
   SaaS decision is actually made, not designed prematurely.
@@ -808,90 +815,63 @@ running.
 
 **⭐ Immediate priority (stated as the definitive next focus, before anything else
 gets built):**
-0. **API-first hardening scope** — "make the API better before adding new
-   languages/clients" is the current priority. Needs its own concrete scoping
-   pass covering at least: versioning strategy, error response consistency/shape,
-   auth model (including how the eventual Flutter client and any company-built
-   alternative frontend authenticate), rate limiting, and request/response
-   contracts for every endpoint implied by this spec so far (upload, queue status,
-   results retrieval, tag CRUD, round management, admin setup wizard steps,
-   interviewer provisioning, etc.). This is the next thing to actually write up in
-   detail — everything else in this list can wait behind it.
+0. ✅ **API-first hardening scope** — RESOLVED. Auth (JWT), Zod validation on all
+   routes, rate limiting (api/auth/upload/pipeline), standardized error responses,
+   versioned endpoints (`/api/v1/...`). All endpoints implemented.
 
 **Carried over:**
-1. Exact color grade score thresholds/bands (style is locked: flat, solid,
-   corporate — no gradient).
-2. **Encryption key hierarchy** giving company admins standing access (§6) without
-   weakening the encrypted-at-rest guarantee — e.g. a company master key that can
-   derive/unwrap per-interviewer keys, rather than admins holding a raw copy of
-   every result. (Reframed from the earlier "recovery access" wording now that
-   standing access is the decided model.)
-3. **Platform admin override mechanism — conditional, SaaS-only.** Not applicable
-   to self-hosted v1 at all (§6). Only needs designing if/when a pure online SaaS
-   version is actually built; the exact permission-granting flow a company would
-   use to authorize it is deferred until that decision is made.
-4. Stack decision for remaining open component: core processor/orchestration (Rust
-   still under consideration here — the case against Rust in §9.1 is specifically
-   about the client app's soft-lock generation, not the core processor).
-5. Applicant-side experience — do they get any confirmation/status after upload, or
-   is the flow entirely one-directional (upload and done, no visibility into
-   outcome)?
-6. **Remaining admin setup wizard steps** — candidates listed in §9.1 step 6
-   (default position/criteria template, retention policy, notifications), none
-   confirmed yet.
-7. **"Custom" database option scope** — is this a generic connection-string field
-   (admin's responsibility to get it right, APAR just stores/uses it), or does APAR
-   need actual driver support for whatever's entered? Affects how much backend work
-   "custom" really implies.
-8. **OpenRouter API key storage** — where/how the company's key is stored on the
-   self-hosted instance (plaintext config, encrypted at rest like results, etc.) —
-   this key is effectively as sensitive as a payment credential since it funds
-   every analysis run.
-9. **App layout/theme style options** — what's actually configurable (colors only?
-   full layout? logo upload?) and whether this ties into the theme system used
-   elsewhere in Sabeeir's projects or is APAR-specific.
+1. ✅ **Grade thresholds** — RESOLVED. A: 80-100, B: 70-80, C: 60-70, D: 55-60,
+   F: <55. Flat solid color bands locked.
+2. ✅ **Encryption key hierarchy** — RESOLVED. Per-interviewer keys stored encrypted
+   with company master key. Admins can reset but not define. See §6.
+3. **Platform admin override mechanism — conditional, SaaS-only.** DEFERRED until
+   SaaS funding exists. Not applicable to v1 self-hosted.
+4. ✅ **Core processor stack** — RESOLVED. TypeScript primary. Rust/Java via Transit
+   (https://github.com/SabeeirSharrma/transit) for performance-critical tasks.
+5. ✅ **Applicant-side experience** — RESOLVED. Confirmation email on upload +
+   public status endpoint (`/api/v1/status/:applicationId`) + status page UI.
+6. ✅ **Remaining admin setup wizard steps** — RESOLVED. Step 5 (interviewer
+   provisioning) is skippable via "Skip for now" button. Step 6 = client
+   distribution: desktop (Windows/macOS, Linux future) + mobile/tablet (Android
+   APK, iOS/iPadOS App Store). Interviewers input public company endpoint + admin-
+   generated code → app soft-locks per admin config. Custom UIs supported on all
+   platforms via documentation (admin follows guides to build custom layouts for
+   desktop, tablet, mobile, web dash, and applicant form). Defaults provided.
+7. ✅ **"Custom" database option scope** — RESOLVED. Real driver support for known
+   external DBs (PostgreSQL, MySQL, MongoDB, etc.). Local = SQLite (auto-created).
+   Custom/unsupported = admin enters connection string + DB type → app generates
+   schema + RLS exceptions → admin provides connection endpoint with credentials.
+8. ✅ **OpenRouter API key storage** — RESOLVED. Encrypted at rest using company
+   master key. API keys treated as payment-credential sensitivity.
+9. ✅ **App layout/theme style options** — RESOLVED. Full configurability on all
+   platforms (desktop, tablet, mobile, web dash, applicant form). Documentation
+   provided for custom UI creation. Defaults available for all who don't want to
+   customize.
 
 **New from previous session:**
-10. **Round advancement mechanics (§12)** — how does an applicant actually move
-    from round N to round N+1? Manual action by interviewer/admin, or some
-    automated trigger (e.g. all round-N interviewers submit a verdict)?
-11. **Two-way email handling (§13)** — replies from applicants (e.g. confirming an
-    interview time) need to route back into the app somehow. Explicitly undesigned
-    — needs its own design pass.
-12. **Background-check-into-AI-verdict question (§14)** — current leaning is to
-    keep them separate, but not locked in.
-13. **Interviewer chat encryption (§16)** — mandatory (reusing §6 keys) vs.
-    admin-configurable toggle.
-14. **Custom database driver support** — overlaps with #7, specifically: does
-    "custom" MongoDB/Redis/Firebase/etc.-adjacent databases get real driver
-    support, or is it purely connection-string-based and unsupported beyond that?
-15. **Recording storage & retention** — screen/audio/mic recordings (§10) need a
-    storage plan (where, how long retained, whether encrypted like analysis
-    results) — not yet addressed at all.
-16. **Relay gateway (§9.2) — opt-in or default?** Assumed opt-in (not required for
-    self-hosted operation), but not confirmed.
-17. **Company-slug reservation mechanics** (§9.2) — first-come-first-served
-    registration, squatting prevention, renaming policy once a slug is in use.
-18. **Relay auth token issuance/rotation** (§9.2) — how companies get and rotate
-    the key that authenticates their instance's relayed requests.
-19. **Relay cost model** (§9.2) — free (consistent with APAR's BYOK/free model) or
-    a future monetization angle (ties into §20's affiliate/business notes)?
-20. **Branch/sub-DB structure** (§9.2) — whether multi-branch is a first-class
-    data-model concept (§7) or purely a routing convention layered on separate
-    instances.
-21. **"Own Worker" tier routing** (§9.2) — for companies running their own
-    dedicated Worker/Durable Object, does `apar.qd.je/<slug>/...` still front
-    it (proxying to their Worker), or does it resolve to a domain the company
-    controls entirely? Also need a template/guide for standing up their own
-    Worker, similar in spirit to the custom background-check integration
-    template (§14).
-22. **Vision-capability enforcement for local models** (§9.3) — known-good list
-    of vision-capable local models maintained by APAR, vs. just documenting the
-    requirement and trusting the admin to pick correctly. Silent failure on
-    scanned PDFs is the risk if this isn't handled deliberately.
-23. **Empty-pool notification mechanism** (§4 step 3) — how a company admin is
-    actually surfaced a position/round with zero available interviewers holding
-    an applicant in queue (dashboard alert, email, both?).
+10. ✅ **Round advancement mechanics (§12)** — RESOLVED. Manual interviewer action:
+    when interviewer approves/accepts, applicant moves to next round (for round-
+    based companies).
+11. **Two-way email handling (§13)** — DEFERRED to v1 Stage 2. Replies from
+    applicants need to route back into the app.
+12. **Background-check-into-AI-verdict question (§14)** — DEFERRED to v2+.
+    Current leaning: keep separate.
+13. **Interviewer chat encryption (§16)** — DEFERRED to v1 optional scope.
+    Mandatory (reusing §6 keys) is the default; admin-configurable toggle is
+    also supported.
+14. ✅ **Custom database driver support** — RESOLVED. See #7 above.
+15. **Recording storage & retention (§10)** — DEFERRED to v1 optional scope.
+16. **Relay gateway (§9.2)** — DEFERRED to post-v1. Assumed opt-in.
+17. **Company-slug reservation mechanics (§9.2)** — DEFERRED to post-v1.
+18. **Relay auth token issuance/rotation (§9.2)** — DEFERRED to post-v1.
+19. **Relay cost model (§9.2)** — DEFERRED to post-v1.
+20. **Branch/sub-DB structure (§9.2)** — DEFERRED to post-v1.
+21. **"Own Worker" tier routing (§9.2)** — DEFERRED to post-v1.
+22. **Vision-capability enforcement for local models (§9.3)** — DEFERRED. Document
+    requirement, trust admin to pick correctly. Silent failure risk acknowledged.
+23. ✅ **Empty-pool notification mechanism (§4 step 3)** — RESOLVED. Email
+    notification to all company admins when position has zero interviewers and
+    applicant is stuck in queue.
 
 ## 22. Roadmap
 

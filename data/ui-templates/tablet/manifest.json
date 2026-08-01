@@ -1,0 +1,8 @@
+{
+  "name": "Tablet Interviewer",
+  "version": "1.0.0",
+  "description": "Touch-optimized tablet interviewer interface with card-based layout",
+  "platform": "tablet",
+  "author": "APAR",
+  "minVersion": "1.0.0"
+}

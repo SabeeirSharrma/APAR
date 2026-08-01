@@ -215,16 +215,16 @@ export async function callVerificationModel(
 /**
  * Derive a color grade from a numeric score (§5, §8).
  * Uses flat, solid color bands — not gradient.
- * Exact thresholds are TBD per spec, using sensible defaults.
+ * Thresholds locked: A: 80-100, B: 70-80, C: 60-70, D: 55-60, F: <55
  */
 export type ColorGrade = 'excellent' | 'good' | 'average' | 'below-average' | 'poor';
 
 export function scoreToGrade(score: number): ColorGrade {
-  if (score >= 90) return 'excellent';
-  if (score >= 70) return 'good';
-  if (score >= 50) return 'average';
-  if (score >= 30) return 'below-average';
-  return 'poor';
+  if (score >= 80) return 'excellent';   // A
+  if (score >= 70) return 'good';        // B
+  if (score >= 60) return 'average';     // C
+  if (score >= 55) return 'below-average'; // D
+  return 'poor';                          // F
 }
 
 /**

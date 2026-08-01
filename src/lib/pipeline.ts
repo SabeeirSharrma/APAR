@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { getOne, getMany, run } from '../db/index.js';
 import {
   createModelClient,
@@ -12,7 +11,8 @@ import {
   buildMainPrompt,
   type MainModelResponse,
 } from './models.js';
-import { encryptResult } from './encryption.js';
+import { encryptResult, decryptApiKey } from './encryption.js';
+import { sendUploadConfirmation, sendEmptyPoolNotification } from './email.js';
 
 // ============================================================================
 // Pipeline Types
@@ -50,6 +50,7 @@ interface PositionRow {
 interface CompanyRow {
   id: string;
   name: string;
+  submission_email: string;
 }
 
 interface InterviewerRow {
@@ -73,7 +74,6 @@ interface ModelConfigRow {
  * Assigns to the interviewer with the fewest current assignments in this position.
  */
 function assignInterviewer(applicationId: string, positionId: string): string | null {
-  // Find available interviewers for this position, ordered by current workload
   const interviewers = getMany<InterviewerRow>(
     `SELECT i.id
      FROM interviewers i
@@ -89,7 +89,6 @@ function assignInterviewer(applicationId: string, positionId: string): string | 
   );
 
   if (interviewers.length === 0) {
-    console.log(`⚠️  Empty interviewer pool for position ${positionId}`);
     return null; // Empty pool — hold in queue
   }
 
@@ -145,7 +144,6 @@ async function analyzeResume(
 
 /**
  * Step 6: Verification pass — check main model output for consistency.
- * Returns the number of verification attempts and whether it passed.
  */
 async function verifyResult(
   mainResult: MainModelResponse,
@@ -185,12 +183,14 @@ async function verifyResult(
 }
 
 /**
- * Step 7: Processor #2 (receiver) — Encrypt and store result.
+ * Step 7: Processor #2 (receiver) — Encrypt with interviewer's key and store result.
  */
 function storeResult(
   applicationId: string,
   mainResult: MainModelResponse,
   verification: { passed: boolean; attempts: number },
+  interviewerId: string,
+  companyId: string,
 ): string {
   const resultId = randomUUID();
   const overallGrade = calculateOverallGrade(mainResult.criteria_scores);
@@ -209,7 +209,8 @@ function storeResult(
     recommendation: mainResult.recommendation,
   };
 
-  const encryptedData = encryptResult(resultData);
+  // Encrypt with the assigned interviewer's key (§2: per-interviewer encryption)
+  const encryptedData = encryptResult(resultData, interviewerId, companyId);
 
   run(
     `INSERT INTO results (id, application_id, encrypted_data, low_confidence, verification_attempts)
@@ -248,7 +249,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     }
 
     const company = getOne<CompanyRow>(
-      'SELECT id, name FROM companies WHERE id = ?',
+      'SELECT id, name, submission_email FROM companies WHERE id = ?',
       { companyId: position.company_id },
     );
     if (!company) {
@@ -264,15 +265,21 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     // Step 3: Auto-assign to interviewer (§4 step 3)
     const assignedInterviewerId = assignInterviewer(ctx.applicationId, ctx.positionId);
     if (!assignedInterviewerId) {
-      // Empty pool — hold in queue
+      // Empty pool — hold in queue and notify admin (#23)
       run(
         `UPDATE applications SET status = 'queued', updated_at = datetime('now') WHERE id = ?`,
         { applicationId: ctx.applicationId },
       );
+
+      // Notify admin: empty pool, high priority (#23)
+      sendEmptyPoolNotification(ctx.companyId, ctx.positionId, ctx.applicantName).catch(
+        (err) => console.error('Failed to send empty pool notification:', err),
+      );
+
       return {
         applicationId: ctx.applicationId,
         status: 'error',
-        error: 'No interviewers available for this position',
+        error: 'No interviewers available for this position — admin notified',
         durationMs: Date.now() - startTime,
       };
     }
@@ -286,22 +293,30 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       { resumeBase64, applicationId: ctx.applicationId },
     );
 
-    // Look up model configs
-    const mainConfig = getOne<ModelConfigRow>(
+    // Look up model configs and decrypt API keys (#8)
+    const mainConfigRaw = getOne<ModelConfigRow>(
       'SELECT * FROM model_provider_configs WHERE company_id = ? AND role = ?',
       { companyId: position.company_id, role: 'main' },
     );
-    if (!mainConfig) {
+    if (!mainConfigRaw) {
       throw new Error('Main model provider not configured');
     }
+    const mainConfig: ModelConfigRow = {
+      ...mainConfigRaw,
+      api_key: mainConfigRaw.api_key ? decryptApiKey(mainConfigRaw.api_key, position.company_id) : null,
+    };
 
-    const verificationConfig = getOne<ModelConfigRow>(
+    const verificationConfigRaw = getOne<ModelConfigRow>(
       'SELECT * FROM model_provider_configs WHERE company_id = ? AND role = ?',
       { companyId: position.company_id, role: 'verification' },
     );
-    if (!verificationConfig) {
+    if (!verificationConfigRaw) {
       throw new Error('Verification model provider not configured');
     }
+    const verificationConfig: ModelConfigRow = {
+      ...verificationConfigRaw,
+      api_key: verificationConfigRaw.api_key ? decryptApiKey(verificationConfigRaw.api_key, position.company_id) : null,
+    };
 
     // Step 5: Main model call (§4 step 5)
     const mainResult = await analyzeResume(resumeBase64, company, position, mainConfig);
@@ -315,8 +330,14 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     // Step 6: Verification pass (§4 step 6)
     const verification = await verifyResult(mainResult, position.criteria, verificationConfig);
 
-    // Step 7-8: Encrypt and store result (§4 step 7-8)
-    const resultId = storeResult(ctx.applicationId, mainResult, verification);
+    // Step 7-8: Encrypt with interviewer's key and store result (§2, §4 step 7-8)
+    const resultId = storeResult(
+      ctx.applicationId,
+      mainResult,
+      verification,
+      assignedInterviewerId,
+      position.company_id,
+    );
 
     // Step 9: Mark as delivered (§4 step 9)
     run(
@@ -336,10 +357,10 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`❌ Pipeline failed for ${ctx.applicationId}:`, errorMessage);
 
-    // Mark as queued so it can be retried
+    // Mark as queued so the retry worker can pick it up
     run(
-      `UPDATE applications SET status = 'queued', updated_at = datetime('now') WHERE id = ?`,
-      { applicationId: ctx.applicationId },
+      `UPDATE applications SET status = 'queued', updated_at = datetime('now') WHERE id = @id`,
+      { id: ctx.applicationId },
     );
 
     return {

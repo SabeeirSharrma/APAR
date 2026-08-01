@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Interviewer — Mobile</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="logo">APAR</div>
+      <button id="logout-btn" class="btn-icon">Logout</button>
+    </header>
+    <main class="content">
+      <div id="view-dashboard" class="view active">
+        <h1>Dashboard</h1>
+        <div class="stats">
+          <div class="stat-card"><div class="stat-value" id="stat-pending">0</div><div class="stat-label">Pending</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-approved">0</div><div class="stat-label">Approved</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-rejected">0</div><div class="stat-label">Rejected</div></div>
+        </div>
+      </div>
+      <div id="view-candidates" class="view">
+        <h1>Candidates</h1>
+        <div id="candidates-list"></div>
+      </div>
+      <div id="view-messages" class="view">
+        <h1>Messages</h1>
+        <div id="messages-container"></div>
+      </div>
+    </main>
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-view="dashboard"><span class="nav-icon">&#9632;</span>Home</button>
+      <button class="nav-item" data-view="candidates"><span class="nav-icon">&#9787;</span>Candidates</button>
+      <button class="nav-item" data-view="messages"><span class="nav-icon">&#9993;</span>Messages</button>
+    </nav>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

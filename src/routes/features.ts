@@ -36,18 +36,18 @@ router.patch('/', async (req: Request, res: Response) => {
 
   // Check if toggle already exists
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM feature_toggles WHERE company_id = ? AND feature = ?',
+    'SELECT id FROM feature_toggles WHERE company_id = @companyId AND feature = @feature',
     { companyId, feature },
   );
 
   if (existing) {
     run(
-      `UPDATE feature_toggles SET is_enabled = ?, updated_at = datetime('now') WHERE company_id = ? AND feature = ?`,
+      `UPDATE feature_toggles SET is_enabled = @isEnabled, updated_at = datetime('now') WHERE company_id = @companyId AND feature = @feature`,
       { isEnabled: isEnabled ? 1 : 0, companyId, feature },
     );
   } else {
     run(
-      `INSERT INTO feature_toggles (id, company_id, feature, is_enabled) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO feature_toggles (id, company_id, feature, is_enabled) VALUES (@id, @companyId, @feature, @isEnabled)`,
       { id: randomUUID(), companyId, feature, isEnabled: isEnabled ? 1 : 0 },
     );
   }

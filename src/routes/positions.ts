@@ -26,7 +26,7 @@ router.get('/', async (req: Request, res: Response) => {
     `SELECT p.*,
        (SELECT COUNT(*) FROM applications a WHERE a.position_id = p.id) as applicant_count
      FROM positions p
-     WHERE p.company_id = ?
+     WHERE p.company_id = @companyId
      ORDER BY p.created_at DESC`,
     { companyId },
   );
@@ -36,7 +36,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 // GET /api/v1/positions/:id — Get position details with interviewers
 router.get('/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   interface PositionDetailRow {
@@ -50,7 +50,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 
   const position = getOne<PositionDetailRow>(
-    'SELECT * FROM positions WHERE id = ? AND company_id = ?',
+    'SELECT * FROM positions WHERE id = @id AND company_id = @companyId',
     { id, companyId },
   );
 
@@ -64,13 +64,13 @@ router.get('/:id', async (req: Request, res: Response) => {
     `SELECT i.id, i.email, i.name
      FROM interviewers i
      JOIN interviewer_positions ip ON i.id = ip.interviewer_id
-     WHERE ip.position_id = ?`,
+     WHERE ip.position_id = @positionId`,
     { positionId: id },
   );
 
   // Get applicant count
   const countRow = getOne<{ count: number }>(
-    'SELECT COUNT(*) as count FROM applications WHERE position_id = ?',
+    'SELECT COUNT(*) as count FROM applications WHERE position_id = @positionId',
     { positionId: id },
   );
 
@@ -98,7 +98,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
   const id = randomUUID();
   run(
     `INSERT INTO positions (id, company_id, name, description, criteria)
-     VALUES (?, ?, ?, ?, ?)`,
+     VALUES (@id, @companyId, @name, @description, @criteria)`,
     { id, companyId, name, description: description || null, criteria },
   );
 
@@ -111,7 +111,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
 
 // PATCH /api/v1/positions/:id — Update position
 router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const result = updatePositionSchema.safeParse(req.body);
@@ -125,7 +125,7 @@ router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Res
   }
 
   const existing = getOne<{ id: string; company_id: string }>(
-    'SELECT id, company_id FROM positions WHERE id = ?',
+    'SELECT id, company_id FROM positions WHERE id = @id',
     { id },
   );
   if (!existing || existing.company_id !== companyId) {
@@ -151,11 +151,11 @@ router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Res
 
 // DELETE /api/v1/positions/:id — Delete position
 router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const existing = getOne<{ id: string; company_id: string }>(
-    'SELECT id, company_id FROM positions WHERE id = ?',
+    'SELECT id, company_id FROM positions WHERE id = @id',
     { id },
   );
   if (!existing || existing.company_id !== companyId) {
@@ -163,13 +163,13 @@ router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Re
     return;
   }
 
-  run('DELETE FROM positions WHERE id = ?', { id });
+  run('DELETE FROM positions WHERE id = @id', { id });
   res.json({ success: true, message: 'Position deleted' });
 });
 
 // POST /api/v1/positions/:id/interviewers — Assign interviewer to position
 router.post('/:id/interviewers', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
   const { interviewerId } = req.body;
 
@@ -179,7 +179,7 @@ router.post('/:id/interviewers', requireRole('company_admin'), async (req: Reque
   }
 
   const position = getOne<{ id: string; company_id: string }>(
-    'SELECT id, company_id FROM positions WHERE id = ?',
+    'SELECT id, company_id FROM positions WHERE id = @id',
     { id },
   );
   if (!position || position.company_id !== companyId) {
@@ -188,7 +188,7 @@ router.post('/:id/interviewers', requireRole('company_admin'), async (req: Reque
   }
 
   const interviewer = getOne<{ id: string; company_id: string }>(
-    'SELECT id, company_id FROM interviewers WHERE id = ?',
+    'SELECT id, company_id FROM interviewers WHERE id = @interviewerId',
     { interviewerId },
   );
   if (!interviewer || interviewer.company_id !== companyId) {
@@ -197,7 +197,7 @@ router.post('/:id/interviewers', requireRole('company_admin'), async (req: Reque
   }
 
   run(
-    'INSERT OR IGNORE INTO interviewer_positions (interviewer_id, position_id) VALUES (?, ?)',
+    'INSERT OR IGNORE INTO interviewer_positions (interviewer_id, position_id) VALUES (@interviewerId, @positionId)',
     { interviewerId, positionId: id },
   );
 
@@ -206,10 +206,11 @@ router.post('/:id/interviewers', requireRole('company_admin'), async (req: Reque
 
 // DELETE /api/v1/positions/:id/interviewers/:interviewerId — Remove interviewer from position
 router.delete('/:id/interviewers/:interviewerId', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id, interviewerId } = req.params;
+  const id = req.params.id as string;
+  const interviewerId = req.params.interviewerId as string;
 
   run(
-    'DELETE FROM interviewer_positions WHERE position_id = ? AND interviewer_id = ?',
+    'DELETE FROM interviewer_positions WHERE position_id = @positionId AND interviewer_id = @interviewerId',
     { positionId: id, interviewerId },
   );
 

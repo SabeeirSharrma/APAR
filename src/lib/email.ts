@@ -1,4 +1,4 @@
-import { getOne } from '../db/index.js';
+import { getOne, getMany } from '../db/index.js';
 
 // ============================================================================
 // Email Service (§13)
@@ -291,6 +291,224 @@ export async function sendMessagNotificationEmail(
     positionName: position.name,
     messagePreview,
   });
+
+  return sendEmail({
+    to: app.email,
+    from: company.submission_email,
+    subject,
+    html,
+    text,
+  });
+}
+
+// --- Upload Confirmation Email (#5) ---
+
+/**
+ * Build upload confirmation email (#5).
+ */
+function buildUploadConfirmationEmail(data: {
+  applicantName: string;
+  positionName: string;
+  companyName: string;
+  applicationId: string;
+}): { subject: string; html: string; text: string } {
+  const subject = `${data.companyName} — Application Received for ${data.positionName}`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"/></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #0f172a;">Application Submitted Successfully</h2>
+      <p>Dear ${data.applicantName},</p>
+      <p>Thank you for applying for <strong>${data.positionName}</strong> at <strong>${data.companyName}</strong>.</p>
+      <p>We have received your application and it is now being processed. You will receive an email notification once the review is complete.</p>
+      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <p style="margin: 0 0 4px 0; font-size: 13px; color: #64748b;">Your Application ID:</p>
+        <p style="margin: 0; font-family: monospace; font-size: 16px; color: #0f172a; font-weight: 600;">${data.applicationId}</p>
+      </div>
+      <p style="color: #64748b; font-size: 13px;">Save this ID to check your application status.</p>
+      <p style="margin-top: 24px; color: #64748b; font-size: 14px;">This is an automated message. Please do not reply directly to this email.</p>
+    </body>
+    </html>
+  `;
+  const text = `Dear ${data.applicantName},\n\nThank you for applying for ${data.positionName} at ${data.companyName}.\n\nWe have received your application and it is now being processed. You will receive an email notification once the review is complete.\n\nYour Application ID: ${data.applicationId}\n\nSave this ID to check your application status.\n\nThis is an automated message.`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Send upload confirmation email to applicant (#5).
+ */
+export async function sendUploadConfirmation(
+  applicationId: string,
+  companyId: string,
+  positionId: string,
+  applicantEmail: string,
+  applicantName: string,
+): Promise<boolean> {
+  const company = getOne<{ name: string; submission_email: string }>(
+    'SELECT name, submission_email FROM companies WHERE id = ?',
+    { id: companyId },
+  );
+  if (!company) return false;
+
+  const position = getOne<{ name: string }>(
+    'SELECT name FROM positions WHERE id = ?',
+    { id: positionId },
+  );
+  if (!position) return false;
+
+  const { subject, html, text } = buildUploadConfirmationEmail({
+    applicantName,
+    positionName: position.name,
+    companyName: company.name,
+    applicationId,
+  });
+
+  return sendEmail({
+    to: applicantEmail,
+    from: company.submission_email,
+    subject,
+    html,
+    text,
+  });
+}
+
+// --- Empty Pool Notification (#23) ---
+
+/**
+ * Build empty-pool notification email for admin (#23).
+ */
+function buildEmptyPoolNotification(data: {
+  companyName: string;
+  positionName: string;
+  applicantName: string;
+}): { subject: string; html: string; text: string } {
+  const subject = `⚠️ ${data.companyName} — No Interviewers Available for ${data.positionName}`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"/></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px;">
+      <div style="background-color: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+        <h2 style="color: #dc2626; margin: 0;">⚠️ Action Required</h2>
+      </div>
+      <h2 style="color: #0f172a;">Empty Interviewer Pool</h2>
+      <p>An application from <strong>${data.applicantName}</strong> for position <strong>${data.positionName}</strong> is stuck in queue because there are no interviewers assigned to this position.</p>
+      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <p style="margin: 0;"><strong>Company:</strong> ${data.companyName}</p>
+        <p style="margin: 4px 0 0 0;"><strong>Position:</strong> ${data.positionName}</p>
+        <p style="margin: 4px 0 0 0;"><strong>Applicant:</strong> ${data.applicantName}</p>
+      </div>
+      <p>Please assign at least one interviewer to this position to process the queued application.</p>
+      <p style="margin-top: 24px; color: #64748b; font-size: 14px;">This is an automated notification from APAR.</p>
+    </body>
+    </html>
+  `;
+  const text = `⚠️ ACTION REQUIRED — Empty Interviewer Pool\n\nAn application from ${data.applicantName} for position ${data.positionName} is stuck in queue because there are no interviewers assigned to this position.\n\nCompany: ${data.companyName}\nPosition: ${data.positionName}\nApplicant: ${data.applicantName}\n\nPlease assign at least one interviewer to this position to process the queued application.\n\nThis is an automated notification from APAR.`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Send empty-pool notification to all company admins (#23).
+ * High-priority notification via email.
+ */
+export async function sendEmptyPoolNotification(
+  companyId: string,
+  positionId: string,
+  applicantName: string,
+): Promise<boolean> {
+  const company = getOne<{ name: string; submission_email: string }>(
+    'SELECT name, submission_email FROM companies WHERE id = ?',
+    { id: companyId },
+  );
+  if (!company) return false;
+
+  const position = getOne<{ name: string }>(
+    'SELECT name FROM positions WHERE id = ?',
+    { id: positionId },
+  );
+  if (!position) return false;
+
+  // Get all admin emails for this company
+  const admins = getMany<{ email: string }>(
+    'SELECT email FROM company_admins WHERE company_id = ?',
+    { companyId },
+  );
+
+  if (admins.length === 0) return false;
+
+  const { subject, html, text } = buildEmptyPoolNotification({
+    companyName: company.name,
+    positionName: position.name,
+    applicantName,
+  });
+
+  // Send to all admins
+  let allSent = true;
+  for (const admin of admins) {
+    const sent = await sendEmail({
+      to: admin.email,
+      from: company.submission_email,
+      subject,
+      html,
+      text,
+    });
+    if (!sent) allSent = false;
+  }
+
+  return allSent;
+}
+
+/**
+ * Send round advancement confirmation email to applicant (#10).
+ */
+export async function sendRoundAdvancementEmail(
+  applicationId: string,
+  roundName: string,
+): Promise<boolean> {
+  const app = getOne<{
+    email: string;
+    name: string;
+    company_id: string;
+    position_id: string;
+  }>(
+    'SELECT email, name, company_id, position_id FROM applications WHERE id = ?',
+    { applicationId },
+  );
+  if (!app) return false;
+
+  const company = getOne<{ name: string; submission_email: string }>(
+    'SELECT name, submission_email FROM companies WHERE id = ?',
+    { id: app.company_id },
+  );
+  if (!company) return false;
+
+  const position = getOne<{ name: string }>(
+    'SELECT name FROM positions WHERE id = ?',
+    { id: app.position_id },
+  );
+  if (!position) return false;
+
+  const subject = `${company.name} — You've Advanced to the Next Round for ${position.name}`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"/></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #0f172a;">Congratulations!</h2>
+      <p>Dear ${app.name},</p>
+      <p>We are pleased to inform you that your application for <strong>${position.name}</strong> at <strong>${company.name}</strong> has advanced to the next round.</p>
+      <div style="background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <p style="margin: 0;"><strong>Next Round:</strong> ${roundName}</p>
+      </div>
+      <p>You will receive further instructions soon. Please monitor your email for updates.</p>
+      <p style="margin-top: 24px; color: #64748b; font-size: 14px;">This is an automated message. Please do not reply directly to this email.</p>
+    </body>
+    </html>
+  `;
+  const text = `Dear ${app.name},\n\nWe are pleased to inform you that your application for ${position.name} at ${company.name} has advanced to the next round.\n\nNext Round: ${roundName}\n\nYou will receive further instructions soon.\n\nThis is an automated message.`;
 
   return sendEmail({
     to: app.email,

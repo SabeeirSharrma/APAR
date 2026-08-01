@@ -55,7 +55,7 @@ router.post('/', async (req: Request, res: Response) => {
 
   run(
     `INSERT INTO tags (id, company_id, name, color, scope, created_by_interviewer_id, is_approved)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (@id, @companyId, @name, @color, @scope, @createdByInterviewerId, @isApproved)`,
     { id, companyId, name, color, scope, createdByInterviewerId: createdByInterviewerId || null, isApproved },
   );
 
@@ -68,7 +68,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 // PATCH /api/v1/tags/:id — Update tag
 router.patch('/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const result = updateTagSchema.safeParse(req.body);
@@ -81,7 +81,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
     return;
   }
 
-  const existing = getOne<{ id: string; company_id: string }>('SELECT id, company_id FROM tags WHERE id = ?', { id });
+  const existing = getOne<{ id: string; company_id: string }>('SELECT id, company_id FROM tags WHERE id = @id', { id });
   if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
@@ -104,26 +104,26 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 // DELETE /api/v1/tags/:id — Delete tag
 router.delete('/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
-  const existing = getOne<{ id: string; company_id: string }>('SELECT id, company_id FROM tags WHERE id = ?', { id });
+  const existing = getOne<{ id: string; company_id: string }>('SELECT id, company_id FROM tags WHERE id = @id', { id });
   if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
   }
 
-  run('DELETE FROM tags WHERE id = ?', { id });
+  run('DELETE FROM tags WHERE id = @id', { id });
   res.json({ success: true, message: 'Tag deleted' });
 });
 
 // POST /api/v1/tags/:id/approve — Approve a global tag (admin only)
 router.post('/:id/approve', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
   const existing = getOne<{ id: string; scope: string; company_id: string }>(
-    'SELECT id, scope, company_id FROM tags WHERE id = ?',
+    'SELECT id, scope, company_id FROM tags WHERE id = @id',
     { id },
   );
   if (!existing || existing.company_id !== companyId) {
@@ -136,22 +136,22 @@ router.post('/:id/approve', requireRole('company_admin'), async (req: Request, r
     return;
   }
 
-  run("UPDATE tags SET is_approved = 1, updated_at = datetime('now') WHERE id = ?", { id });
+  run("UPDATE tags SET is_approved = 1, updated_at = datetime('now') WHERE id = @id", { id });
   res.json({ success: true, message: 'Tag approved', data: { tagId: id, isApproved: true } });
 });
 
 // POST /api/v1/tags/:id/decline — Decline/delete a global tag (admin only)
 router.post('/:id/decline', requireRole('company_admin'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { companyId } = req.auth!;
 
-  const existing = getOne<{ id: string; company_id: string }>('SELECT id, company_id FROM tags WHERE id = ?', { id });
+  const existing = getOne<{ id: string; company_id: string }>('SELECT id, company_id FROM tags WHERE id = @id', { id });
   if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
   }
 
-  run('DELETE FROM tags WHERE id = ?', { id });
+  run('DELETE FROM tags WHERE id = @id', { id });
   res.json({ success: true, message: 'Tag declined and removed' });
 });
 

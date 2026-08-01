@@ -186,6 +186,7 @@
   <script>
     const API = window.location.origin + '/api/v1';
     let token = localStorage.getItem('apar_token');
+    let userId = localStorage.getItem('apar_user_id');
     let currentAppId = null;
 
     async function api(method, path, body) {
@@ -205,7 +206,9 @@
       });
       if (data.success) {
         token = data.data.token;
+        userId = data.data.userId;
         localStorage.setItem('apar_token', token);
+        localStorage.setItem('apar_user_id', userId);
         showApp();
       } else {
         const el = document.getElementById('login-error');
@@ -214,7 +217,7 @@
       }
     };
 
-    function logout() { localStorage.removeItem('apar_token'); location.reload(); }
+    function logout() { localStorage.removeItem('apar_token'); localStorage.removeItem('apar_user_id'); location.reload(); }
 
     if (token) showApp();
 
@@ -237,7 +240,7 @@
 
     // Load candidates
     async function loadMyCandidates() {
-      const data = await api('GET', '/applicants?pageSize=100');
+      const data = await api('GET', `/applicants?interviewerId=${userId}&pageSize=100`);
       if (!data.success) return;
       document.getElementById('my-candidates').innerHTML = data.data.items.map(a => `<tr class="clickable" onclick="viewApplicant('${a.id}')"><td>${a.name}</td><td>${a.email}</td><td>${a.position_name || '-'}</td><td><span class="badge badge-${statusColor(a.status)}">${a.status}</span></td><td>${new Date(a.created_at).toLocaleDateString()}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#64748b;">No candidates assigned yet</td></tr>';
     }

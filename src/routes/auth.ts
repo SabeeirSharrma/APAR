@@ -23,7 +23,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
 
   // Check if admin email already exists
   const existing = getOne<{ id: string }>(
-    'SELECT id FROM company_admins WHERE email = ?',
+    'SELECT id FROM company_admins WHERE email = @email',
     { email: adminEmail },
   );
   if (existing) {
@@ -42,7 +42,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
   const { transaction } = await import('../db/index.js');
   transaction(() => {
     run(
-      `INSERT INTO companies (id, name, slug, submission_email) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO companies (id, name, slug, submission_email) VALUES (@id, @name, @slug, @submissionEmail)`,
       { id: companyId, name, slug, submissionEmail },
     );
 
@@ -51,13 +51,13 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
     import('bcryptjs').then(bcrypt => {
       const hash = bcrypt.hashSync(password, 12);
       run(
-        `INSERT INTO company_admins (id, company_id, email, name, password_hash) VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO company_admins (id, company_id, email, name, password_hash) VALUES (@id, @companyId, @email, @name, @password_hash)`,
         { id: adminId, companyId, email: adminEmail, name: adminName, password_hash: hash },
       );
     });
 
     run(
-      `INSERT INTO setup_state (id, company_id) VALUES (?, ?)`,
+      `INSERT INTO setup_state (id, company_id) VALUES (@id, @companyId)`,
       { id: randomUUID(), companyId },
     );
   });
@@ -107,7 +107,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     name: string;
     password_hash: string;
   }>(
-    'SELECT id, company_id, email, name, password_hash FROM company_admins WHERE email = ?',
+    'SELECT id, company_id, email, name, password_hash FROM company_admins WHERE email = @email',
     { email },
   );
 
@@ -149,7 +149,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     name: string;
     password_hash: string;
   }>(
-    'SELECT id, company_id, email, name, password_hash FROM interviewers WHERE email = ?',
+    'SELECT id, company_id, email, name, password_hash FROM interviewers WHERE email = @email',
     { email },
   );
 

@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS interviewers (
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL DEFAULT '',
   public_key TEXT NOT NULL DEFAULT '',
+  encryption_key TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(company_id, email)
@@ -99,9 +100,10 @@ CREATE TABLE IF NOT EXISTS applications (
   resume_base64 TEXT,
   supplementary_info TEXT,
   status TEXT NOT NULL DEFAULT 'queued'
-    CHECK(status IN ('queued','processing','verifying','delivered','approved','rejected')),
+    CHECK(status IN ('queued','processing','verifying','delivered','approved','rejected','pending-review')),
   current_round_id TEXT REFERENCES rounds(id) ON DELETE SET NULL,
   assigned_interviewer_id TEXT REFERENCES interviewers(id) ON DELETE SET NULL,
+  retry_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -269,6 +271,26 @@ CREATE TABLE IF NOT EXISTS feature_toggles (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(company_id, feature)
 );
+
+-- ============================================================================
+-- Custom UI System
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS custom_uis (
+  id TEXT PRIMARY KEY NOT NULL,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK(platform IN ('desktop','tablet','mobile','web_dash','applicant_form')),
+  name TEXT NOT NULL,
+  version TEXT NOT NULL DEFAULT '1.0.0',
+  manifest TEXT NOT NULL DEFAULT '{}',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_uis_company ON custom_uis(company_id);
+CREATE INDEX IF NOT EXISTS idx_custom_uis_platform ON custom_uis(platform);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_uis_active ON custom_uis(company_id, platform, is_active) WHERE is_active = 1;
 
 -- ============================================================================
 -- Setup State
