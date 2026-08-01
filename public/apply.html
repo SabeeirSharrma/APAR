@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit Application</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1e293b; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 40px; max-width: 480px; width: 100%; margin: 20px; }
+    h1 { font-size: 24px; margin-bottom: 8px; color: #0f172a; }
+    .subtitle { color: #64748b; margin-bottom: 32px; font-size: 14px; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; font-weight: 500; margin-bottom: 6px; font-size: 14px; color: #334155; }
+    input[type="text"], input[type="email"], textarea { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; transition: border-color 0.2s; }
+    input:focus, textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    textarea { resize: vertical; min-height: 80px; }
+    .file-upload { border: 2px dashed #e2e8f0; border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+    .file-upload:hover { border-color: #3b82f6; background: #f0f9ff; }
+    .file-upload.has-file { border-color: #22c55e; background: #f0fdf4; }
+    .file-upload input { display: none; }
+    .file-upload p { color: #64748b; font-size: 14px; }
+    .file-upload .file-name { color: #0f172a; font-weight: 500; margin-top: 8px; }
+    .btn { width: 100%; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
+    .btn:hover { background: #2563eb; }
+    .btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    .success { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 24px; text-align: center; }
+    .success h2 { color: #16a34a; margin-bottom: 8px; }
+    .success p { color: #334155; font-size: 14px; }
+    .error { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; color: #dc2626; font-size: 14px; margin-bottom: 20px; display: none; }
+    .info { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="form-view">
+      <h1>Submit Your Application</h1>
+      <p class="subtitle" id="position-name">Loading position...</p>
+
+      <div class="error" id="error-msg"></div>
+
+      <form id="apply-form">
+        <div class="form-group">
+          <label for="name">Full Name *</label>
+          <input type="text" id="name" name="name" required placeholder="John Doe">
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email Address *</label>
+          <input type="email" id="email" name="email" required placeholder="john@example.com">
+        </div>
+
+        <div class="form-group">
+          <label>Resume (PDF) *</label>
+          <div class="file-upload" id="file-upload" onclick="document.getElementById('resume').click()">
+            <input type="file" id="resume" name="resume" accept=".pdf" required>
+            <p id="upload-text">Click to upload or drag and drop</p>
+            <p class="info">PDF only, max 10MB</p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="supplementary">Additional Information (optional)</label>
+          <textarea id="supplementary" name="supplementary" placeholder="Any additional information you'd like to provide..."></textarea>
+        </div>
+
+        <button type="submit" class="btn" id="submit-btn">Submit Application</button>
+      </form>
+    </div>
+
+    <div id="success-view" style="display: none;">
+      <div class="success">
+        <h2>Application Submitted!</h2>
+        <p>Your application has been received and is being processed. You will receive an email notification once your review is complete.</p>
+        <p style="margin-top: 16px; font-size: 12px; color: #94a3b8;">Application ID: <span id="app-id"></span></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin + '/api/v1';
+
+    // Get position ID from URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const positionId = urlParams.get('positionId');
+
+    if (!positionId) {
+      document.getElementById('position-name').textContent = 'No position specified. Please use the correct link.';
+      document.getElementById('submit-btn').disabled = true;
+    } else {
+      // Load position info
+      fetch(`${API_BASE}/positions/${positionId}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('apar_token') || ''}` }
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success && data.data) {
+            document.getElementById('position-name').textContent = `Applying for: ${data.data.name}`;
+          } else {
+            document.getElementById('position-name').textContent = 'Position not found.';
+            document.getElementById('submit-btn').disabled = true;
+          }
+        })
+        .catch(() => {
+          document.getElementById('position-name').textContent = 'Unable to load position details.';
+        });
+    }
+
+    // File upload UI
+    const fileInput = document.getElementById('resume');
+    const fileUpload = document.getElementById('file-upload');
+    const uploadText = document.getElementById('upload-text');
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        uploadText.textContent = file.name;
+        fileUpload.classList.add('has-file');
+      }
+    });
+
+    // Form submission
+    document.getElementById('apply-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const name = document.getElementById('name').value;
+      const email = document.getElementById('email').value;
+      const resume = fileInput.files[0];
+      const supplementary = document.getElementById('supplementary').value;
+      const errorEl = document.getElementById('error-msg');
+      const submitBtn = document.getElementById('submit-btn');
+
+      if (!name || !email || !resume) {
+        errorEl.textContent = 'Please fill in all required fields.';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      errorEl.style.display = 'none';
+
+      const formData = new FormData();
+      formData.append('positionId', positionId);
+      formData.append('applicantName', name);
+      formData.append('applicantEmail', email);
+      formData.append('resume', resume);
+      if (supplementary) formData.append('supplementaryInfo', supplementary);
+
+      try {
+        const response = await fetch(`${API_BASE}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          document.getElementById('form-view').style.display = 'none';
+          document.getElementById('success-view').style.display = 'block';
+          document.getElementById('app-id').textContent = data.data.applicationId;
+        } else {
+          errorEl.textContent = data.error || 'Submission failed. Please try again.';
+          errorEl.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Application';
+        }
+      } catch (err) {
+        errorEl.textContent = 'Network error. Please check your connection and try again.';
+        errorEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Application';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APAR Interviewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
+    .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .login-box { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 40px; max-width: 400px; width: 100%; margin: 20px; }
+    .login-box h1 { font-size: 24px; margin-bottom: 4px; }
+    .login-box .subtitle { color: #64748b; margin-bottom: 24px; font-size: 14px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-weight: 500; margin-bottom: 4px; font-size: 14px; }
+    input, select { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+    input:focus, select:focus { outline: none; border-color: #3b82f6; }
+    .btn { padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }
+    .btn:hover { background: #2563eb; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn-success { background: #22c55e; }
+    .btn-success:hover { background: #16a34a; }
+    .btn-danger { background: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+    .error { color: #dc2626; font-size: 13px; margin-top: 8px; display: none; }
+
+    .app { display: none; }
+    .app.active { display: flex; min-height: 100vh; }
+    .sidebar { width: 240px; background: #0f172a; color: white; min-height: 100vh; padding: 20px 0; position: fixed; }
+    .sidebar h2 { padding: 0 20px 20px; font-size: 18px; border-bottom: 1px solid #1e293b; }
+    .sidebar nav { padding: 12px 0; }
+    .sidebar nav a { display: block; padding: 10px 20px; color: #94a3b8; text-decoration: none; font-size: 14px; transition: all 0.2s; }
+    .sidebar nav a:hover, .sidebar nav a.active { color: white; background: #1e293b; }
+    .main { margin-left: 240px; padding: 24px; flex: 1; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .header h1 { font-size: 22px; }
+    .card { background: white; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 16px; }
+    .card h3 { font-size: 16px; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    th { font-weight: 500; color: #64748b; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .badge-green { background: #dcfce7; color: #16a34a; }
+    .badge-yellow { background: #fef9c3; color: #a16207; }
+    .badge-red { background: #fee2e2; color: #dc2626; }
+    .badge-blue { background: #dbeafe; color: #2563eb; }
+    .clickable { cursor: pointer; }
+    .clickable:hover { background: #f8fafc; }
+    .detail-panel { display: none; }
+    .detail-panel.active { display: block; }
+    .grade { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .grade-excellent { background: #dcfce7; color: #16a34a; }
+    .grade-good { background: #dbeafe; color: #2563eb; }
+    .grade-average { background: #fef9c3; color: #a16207; }
+    .grade-below-average { background: #fed7aa; color: #c2410c; }
+    .grade-poor { background: #fee2e2; color: #dc2626; }
+    .verdict { font-size: 18px; font-weight: 600; margin: 8px 0; }
+    .criteria-item { padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
+    .criteria-item:last-child { border-bottom: none; }
+    .score-bar { height: 8px; background: #e2e8f0; border-radius: 4px; margin-top: 6px; }
+    .score-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+    .notes-section { margin-top: 16px; }
+    .note { padding: 12px; background: #f8fafc; border-radius: 8px; margin-bottom: 8px; }
+    .note .meta { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+    .message-input { display: flex; gap: 8px; margin-top: 12px; }
+    .message-input input { flex: 1; }
+    .low-confidence { background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 14px; color: #92400e; }
+  </style>
+</head>
+<body>
+  <!-- Login -->
+  <div id="login-view" class="login-container">
+    <div class="login-box">
+      <h1>APAR Interviewer</h1>
+      <p class="subtitle">Sign in to view your assigned candidates</p>
+      <div class="error" id="login-error"></div>
+      <form id="login-form">
+        <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+        <div class="form-group"><label>Password</label><input type="password" id="login-password" required></div>
+        <button type="submit" class="btn" style="width:100%;">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="app" class="app">
+    <div class="sidebar">
+      <h2>APAR</h2>
+      <nav>
+        <a href="#" class="active" onclick="showSection('dashboard')">My Candidates</a>
+        <a href="#" onclick="showSection('all')">All Applicants</a>
+      </nav>
+      <nav style="position:absolute;bottom:0;width:100%;"><a href="#" onclick="logout()">Sign Out</a></nav>
+    </div>
+
+    <div class="main">
+      <!-- Dashboard: My Candidates -->
+      <div id="section-dashboard" class="section">
+        <div class="header"><h1>My Candidates</h1></div>
+        <div class="card">
+          <table><thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Status</th><th>Date</th></tr></thead><tbody id="my-candidates"></tbody></table>
+        </div>
+      </div>
+
+      <!-- All Applicants -->
+      <div id="section-all" class="section" style="display:none;">
+        <div class="header"><h1>All Applicants</h1></div>
+        <div class="card">
+          <table><thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Status</th><th>Date</th></tr></thead><tbody id="all-applicants"></tbody></table>
+        </div>
+      </div>
+
+      <!-- Detail Panel -->
+      <div id="detail-panel" class="detail-panel">
+        <div class="header">
+          <button class="btn btn-sm" style="background:#64748b;" onclick="hideDetail()">← Back</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm btn-success" onclick="updateStatus('approved')">Approve</button>
+            <button class="btn btn-sm btn-danger" onclick="updateStatus('rejected')">Reject</button>
+          </div>
+        </div>
+
+        <div id="low-confidence-notice" class="low-confidence" style="display:none;">
+          ⚠️ Low Confidence — This result did not pass all verification checks. Please verify against the resume and other materials directly.
+        </div>
+
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
+          <div>
+            <!-- Verdict -->
+            <div class="card">
+              <h3>AI Analysis</h3>
+              <div id="verdict" class="verdict"></div>
+              <p id="summary" style="color:#64748b;font-size:14px;margin-top:8px;"></p>
+              <p id="recommendation" style="margin-top:12px;padding:12px;background:#f0f9ff;border-radius:8px;font-size:14px;"></p>
+            </div>
+
+            <!-- Criteria Breakdown -->
+            <div class="card">
+              <h3>Criteria Breakdown</h3>
+              <div id="criteria-list"></div>
+            </div>
+
+            <!-- Notes -->
+            <div class="card">
+              <h3>Notes</h3>
+              <div id="notes-list"></div>
+              <div class="message-input">
+                <input type="text" id="note-input" placeholder="Add a note...">
+                <button class="btn btn-sm" onclick="addNote()">Add</button>
+              </div>
+            </div>
+
+            <!-- Messages -->
+            <div class="card">
+              <h3>Messages to Applicant</h3>
+              <div id="messages-list"></div>
+              <div class="message-input">
+                <input type="text" id="msg-input" placeholder="Send a message to the applicant...">
+                <button class="btn btn-sm" onclick="sendMessage()">Send</button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <!-- Applicant Info -->
+            <div class="card">
+              <h3>Applicant</h3>
+              <p><strong>Name:</strong> <span id="app-name"></span></p>
+              <p><strong>Email:</strong> <span id="app-email"></span></p>
+              <p><strong>Position:</strong> <span id="app-position"></span></p>
+              <p><strong>Applied:</strong> <span id="app-date"></span></p>
+              <p><strong>Status:</strong> <span id="app-status"></span></p>
+            </div>
+
+            <!-- Tags -->
+            <div class="card">
+              <h3>Tags</h3>
+              <div id="tags-display"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = window.location.origin + '/api/v1';
+    let token = localStorage.getItem('apar_token');
+    let currentAppId = null;
+
+    async function api(method, path, body) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(`${API}${path}`, opts);
+      return res.json();
+    }
+
+    // Auth
+    document.getElementById('login-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const data = await api('POST', '/auth/login', {
+        email: document.getElementById('login-email').value,
+        password: document.getElementById('login-password').value,
+      });
+      if (data.success) {
+        token = data.data.token;
+        localStorage.setItem('apar_token', token);
+        showApp();
+      } else {
+        const el = document.getElementById('login-error');
+        el.textContent = data.error;
+        el.style.display = 'block';
+      }
+    };
+
+    function logout() { localStorage.removeItem('apar_token'); location.reload(); }
+
+    if (token) showApp();
+
+    async function showApp() {
+      document.getElementById('login-view').style.display = 'none';
+      document.getElementById('app').classList.add('active');
+      loadMyCandidates();
+    }
+
+    // Navigation
+    function showSection(name) {
+      document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+      document.getElementById('detail-panel').classList.remove('active');
+      document.getElementById(`section-${name}`).style.display = 'block';
+      document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
+      event.target.classList.add('active');
+      if (name === 'dashboard') loadMyCandidates();
+      else loadAllApplicants();
+    }
+
+    // Load candidates
+    async function loadMyCandidates() {
+      const data = await api('GET', '/applicants?pageSize=100');
+      if (!data.success) return;
+      document.getElementById('my-candidates').innerHTML = data.data.items.map(a => `<tr class="clickable" onclick="viewApplicant('${a.id}')"><td>${a.name}</td><td>${a.email}</td><td>${a.position_name || '-'}</td><td><span class="badge badge-${statusColor(a.status)}">${a.status}</span></td><td>${new Date(a.created_at).toLocaleDateString()}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#64748b;">No candidates assigned yet</td></tr>';
+    }
+
+    async function loadAllApplicants() {
+      const data = await api('GET', '/applicants?pageSize=100');
+      if (!data.success) return;
+      document.getElementById('all-applicants').innerHTML = data.data.items.map(a => `<tr class="clickable" onclick="viewApplicant('${a.id}')"><td>${a.name}</td><td>${a.email}</td><td>${a.position_name || '-'}</td><td><span class="badge badge-${statusColor(a.status)}">${a.status}</span></td><td>${new Date(a.created_at).toLocaleDateString()}</td></tr>`).join('');
+    }
+
+    function statusColor(s) { return { queued: 'yellow', processing: 'yellow', delivered: 'blue', approved: 'green', rejected: 'red' }[s] || 'blue'; }
+
+    // View applicant detail
+    async function viewApplicant(id) {
+      currentAppId = id;
+      const data = await api('GET', `/applicants/${id}`);
+      if (!data.success) return;
+
+      const { applicant: app, result } = data.data;
+      document.getElementById('section-dashboard').style.display = 'none';
+      document.getElementById('section-all').style.display = 'none';
+      document.getElementById('detail-panel').classList.add('active');
+
+      // Applicant info
+      document.getElementById('app-name').textContent = app.name;
+      document.getElementById('app-email').textContent = app.email;
+      document.getElementById('app-position').textContent = app.position_name;
+      document.getElementById('app-date').textContent = new Date(app.created_at).toLocaleDateString();
+      document.getElementById('app-status').innerHTML = `<span class="badge badge-${statusColor(app.status)}">${app.status}</span>`;
+
+      // Tags
+      document.getElementById('tags-display').innerHTML = app.tags.length ? app.tags.map(t => `<span class="badge" style="background:${t.color}20;color:${t.color};margin-right:4px;">${t.name}</span>`).join('') : '<span style="color:#94a3b8;font-size:13px;">No tags</span>';
+
+      // Result
+      if (result) {
+        document.getElementById('low-confidence-notice').style.display = result.lowConfidence ? 'block' : 'none';
+        document.getElementById('verdict').textContent = result.overallVerdict;
+        document.getElementById('verdict').style.color = { 'Meets Criteria': '#16a34a', 'Partially Meets Criteria': '#a16207', 'Does Not Meet Criteria': '#dc2626' }[result.overallVerdict] || '#1e293b';
+        document.getElementById('summary').textContent = result.summary;
+        document.getElementById('recommendation').textContent = result.recommendation;
+
+        document.getElementById('criteria-list').innerHTML = result.criteriaScores.map(c => `
+          <div class="criteria-item">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span><strong>${c.criterion}</strong></span>
+              <span><span class="grade grade-${c.grade}">${c.score}%</span></span>
+            </div>
+            <p style="font-size:13px;color:#64748b;margin-top:4px;">${c.justification}</p>
+            <div class="score-bar"><div class="score-fill" style="width:${c.score}%;background:${gradeColor(c.grade)};"></div></div>
+          </div>
+        `).join('');
+      } else {
+        document.getElementById('verdict').textContent = 'Analysis not yet available';
+        document.getElementById('summary').textContent = '';
+        document.getElementById('recommendation').textContent = '';
+        document.getElementById('criteria-list').innerHTML = '';
+      }
+
+      // Notes
+      document.getElementById('notes-list').innerHTML = app.notes.length ? app.notes.map(n => `<div class="note"><div class="meta">${n.interviewer_id.slice(0,8)}... • ${new Date(n.created_at).toLocaleString()}</div><p>${n.content}</p></div>`).join('') : '<p style="color:#94a3b8;font-size:13px;">No notes yet</p>';
+
+      // Messages
+      loadMessages(id);
+    }
+
+    function hideDetail() {
+      document.getElementById('detail-panel').classList.remove('active');
+      document.getElementById('section-dashboard').style.display = 'block';
+      currentAppId = null;
+    }
+
+    function gradeColor(g) { return { excellent: '#22c55e', good: '#3b82f6', average: '#eab308', 'below-average': '#f97316', poor: '#ef4444' }[g] || '#94a3b8'; }
+
+    async function updateStatus(status) {
+      if (!currentAppId) return;
+      await api('PATCH', `/applicants/${currentAppId}/status`, { status });
+      viewApplicant(currentAppId);
+    }
+
+    async function addNote() {
+      const input = document.getElementById('note-input');
+      if (!input.value.trim() || !currentAppId) return;
+      await api('POST', '/notes', { applicantId: currentAppId, content: input.value });
+      input.value = '';
+      viewApplicant(currentAppId);
+    }
+
+    async function loadMessages(appId) {
+      const data = await api('GET', `/messages/${appId}`);
+      if (!data.success) return;
+      document.getElementById('messages-list').innerHTML = data.data.length ? data.data.map(m => `<div class="note"><div class="meta">${m.senderName} • ${new Date(m.created_at).toLocaleString()}</div><p>${m.content}</p></div>`).join('') : '<p style="color:#94a3b8;font-size:13px;">No messages yet</p>';
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('msg-input');
+      if (!input.value.trim() || !currentAppId) return;
+      await api('POST', '/messages', { applicantId: currentAppId, content: input.value });
+      input.value = '';
+      loadMessages(currentAppId);
+    }
+  </script>
+</body>
+</html>

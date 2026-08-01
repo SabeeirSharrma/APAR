@@ -1,17 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { getOne, getMany, run } from '../db/index.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
+import { createTagSchema, updateTagSchema } from '../lib/validation.js';
 
 const router = Router();
 
-// GET /api/v1/tags - List all tags (global + local for interviewer)
-router.get('/', async (req: Request, res: Response) => {
-  const { companyId, scope } = req.query;
+// All tag routes require auth
+router.use(requireAuth);
 
-  if (!companyId) {
-    res.status(400).json({ success: false, error: 'Missing required query param: companyId' });
-    return;
-  }
+// GET /api/v1/tags — List all tags (global + local for interviewer)
+router.get('/', async (req: Request, res: Response) => {
+  const { companyId } = req.auth!;
+  const { scope } = req.query;
 
   let where = 'company_id = @companyId';
   const params: Record<string, unknown> = { companyId };
@@ -32,22 +33,21 @@ router.get('/', async (req: Request, res: Response) => {
   res.json({ success: true, data: tags });
 });
 
-// POST /api/v1/tags - Create a new tag
+// POST /api/v1/tags — Create a new tag
 router.post('/', async (req: Request, res: Response) => {
-  const { companyId, name, color, scope, createdByInterviewerId } = req.body;
+  const { companyId } = req.auth!;
 
-  if (!companyId || !name || !color || !scope) {
+  const result = createTagSchema.safeParse({ ...req.body, companyId });
+  if (!result.success) {
     res.status(400).json({
       success: false,
-      error: 'Missing required fields: companyId, name, color, scope',
+      error: 'Validation failed',
+      details: result.error.flatten().fieldErrors,
     });
     return;
   }
 
-  if (!['global', 'local'].includes(scope)) {
-    res.status(400).json({ success: false, error: 'Scope must be "global" or "local"' });
-    return;
-  }
+  const { name, color, scope, createdByInterviewerId } = result.data;
 
   const id = randomUUID();
   // Local tags are auto-approved; global tags require admin approval
@@ -66,17 +66,28 @@ router.post('/', async (req: Request, res: Response) => {
   });
 });
 
-// PATCH /api/v1/tags/:id - Update tag
+// PATCH /api/v1/tags/:id — Update tag
 router.patch('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, color } = req.body;
+  const { companyId } = req.auth!;
 
-  const existing = getOne<{ id: string }>('SELECT id FROM tags WHERE id = ?', { id });
-  if (!existing) {
+  const result = updateTagSchema.safeParse(req.body);
+  if (!result.success) {
+    res.status(400).json({
+      success: false,
+      error: 'Validation failed',
+      details: result.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const existing = getOne<{ id: string; company_id: string }>('SELECT id, company_id FROM tags WHERE id = ?', { id });
+  if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
   }
 
+  const { name, color } = result.data;
   const updates: string[] = [];
   const params: Record<string, unknown> = { id };
 
@@ -91,12 +102,13 @@ router.patch('/:id', async (req: Request, res: Response) => {
   res.json({ success: true, message: 'Tag updated', data: { id, ...(name && { name }), ...(color && { color }) } });
 });
 
-// DELETE /api/v1/tags/:id - Delete tag
+// DELETE /api/v1/tags/:id — Delete tag
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { companyId } = req.auth!;
 
-  const existing = getOne<{ id: string }>('SELECT id FROM tags WHERE id = ?', { id });
-  if (!existing) {
+  const existing = getOne<{ id: string; company_id: string }>('SELECT id, company_id FROM tags WHERE id = ?', { id });
+  if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
   }
@@ -105,12 +117,16 @@ router.delete('/:id', async (req: Request, res: Response) => {
   res.json({ success: true, message: 'Tag deleted' });
 });
 
-// POST /api/v1/tags/:id/approve - Approve a global tag (admin only)
-router.post('/:id/approve', async (req: Request, res: Response) => {
+// POST /api/v1/tags/:id/approve — Approve a global tag (admin only)
+router.post('/:id/approve', requireRole('company_admin'), async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { companyId } = req.auth!;
 
-  const existing = getOne<{ id: string; scope: string }>('SELECT id, scope FROM tags WHERE id = ?', { id });
-  if (!existing) {
+  const existing = getOne<{ id: string; scope: string; company_id: string }>(
+    'SELECT id, scope, company_id FROM tags WHERE id = ?',
+    { id },
+  );
+  if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
   }
@@ -124,12 +140,13 @@ router.post('/:id/approve', async (req: Request, res: Response) => {
   res.json({ success: true, message: 'Tag approved', data: { tagId: id, isApproved: true } });
 });
 
-// POST /api/v1/tags/:id/decline - Decline/delete a global tag (admin only)
-router.post('/:id/decline', async (req: Request, res: Response) => {
+// POST /api/v1/tags/:id/decline — Decline/delete a global tag (admin only)
+router.post('/:id/decline', requireRole('company_admin'), async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { companyId } = req.auth!;
 
-  const existing = getOne<{ id: string; scope: string }>('SELECT id, scope FROM tags WHERE id = ?', { id });
-  if (!existing) {
+  const existing = getOne<{ id: string; company_id: string }>('SELECT id, company_id FROM tags WHERE id = ?', { id });
+  if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
   }

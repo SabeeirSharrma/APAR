@@ -5,6 +5,8 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { run, getOne } from '../db/index.js';
 import { runPipeline, getPipelineStatus } from '../lib/pipeline.js';
+import { requireAuth } from '../middleware/auth.js';
+import { uploadLimiter } from '../middleware/rateLimit.js';
 
 const router = Router();
 
@@ -16,17 +18,17 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Configure multer storage
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req, _file, cb) => {
     cb(null, uploadsDir);
   },
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     const uniqueSuffix = `${Date.now()}-${randomUUID()}`;
     cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
   },
 });
 
-// File filter - only PDFs
-const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+// File filter — only PDFs
+const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   if (file.mimetype === 'application/pdf') {
     cb(null, true);
   } else {
@@ -37,16 +39,17 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
 // Configure upload
 const upload = multer({
   storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter,
 });
 
-// POST /api/v1/upload - Upload a resume and trigger pipeline
-router.post('/', upload.single('resume'), async (req: Request, res: Response) => {
+// POST /api/v1/upload — Upload a resume and trigger pipeline (public, no auth required for applicant-facing endpoint)
+router.post('/', uploadLimiter, upload.single('resume'), async (req: Request, res: Response) => {
   try {
-    const { positionId, applicantEmail, applicantName, supplementaryInfo } = req.body;
+    const positionId = req.body.positionId as string;
+    const applicantEmail = req.body.applicantEmail as string;
+    const applicantName = req.body.applicantName as string;
+    const supplementaryInfo = req.body.supplementaryInfo as string | undefined;
 
     if (!positionId || !applicantEmail || !applicantName) {
       res.status(400).json({
@@ -64,6 +67,13 @@ router.post('/', upload.single('resume'), async (req: Request, res: Response) =>
       return;
     }
 
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(applicantEmail)) {
+      res.status(400).json({ success: false, error: 'Invalid email address' });
+      return;
+    }
+
     // Verify position exists and get company_id
     interface PositionLookup {
       id: string;
@@ -75,10 +85,7 @@ router.post('/', upload.single('resume'), async (req: Request, res: Response) =>
     );
 
     if (!position) {
-      res.status(404).json({
-        success: false,
-        error: 'Position not found',
-      });
+      res.status(404).json({ success: false, error: 'Position not found' });
       return;
     }
 
@@ -98,7 +105,7 @@ router.post('/', upload.single('resume'), async (req: Request, res: Response) =>
       },
     );
 
-    // Return immediate response with application ID
+    // Return immediate response
     res.status(202).json({
       success: true,
       message: 'Resume uploaded, processing started',
@@ -127,24 +134,18 @@ router.post('/', upload.single('resume'), async (req: Request, res: Response) =>
     });
   } catch (error) {
     console.error('Upload error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to upload resume',
-    });
+    res.status(500).json({ success: false, error: 'Failed to upload resume' });
   }
 });
 
-// GET /api/v1/upload/status/:applicationId - Check pipeline status
+// GET /api/v1/upload/status/:applicationId — Check pipeline status
 router.get('/status/:applicationId', async (req: Request, res: Response) => {
-  const { applicationId } = req.params;
+  const applicationId = req.params.applicationId as string;
 
   const status = getPipelineStatus(applicationId);
 
   if (!status) {
-    res.status(404).json({
-      success: false,
-      error: 'Application not found',
-    });
+    res.status(404).json({ success: false, error: 'Application not found' });
     return;
   }
 

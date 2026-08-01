@@ -1,11 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { getOne, getMany, run } from '../db/index.js';
 import { decryptResult } from '../lib/encryption.js';
+import { requireAuth } from '../middleware/auth.js';
+import { statusUpdateSchema } from '../lib/validation.js';
+import { sendApprovalEmail, sendRejectionEmail } from '../lib/email.js';
 
 const router = Router();
 
-// GET /api/v1/applicants - List all applicants (for interviewer dashboard)
+// All applicant routes require auth
+router.use(requireAuth);
+
+// GET /api/v1/applicants — List all applicants (for interviewer dashboard)
 router.get('/', async (req: Request, res: Response) => {
+  const { companyId } = req.auth!;
   const { positionId, status, tag, round, interviewerId, page = '1', pageSize = '20' } = req.query;
 
   const limit = Math.min(parseInt(pageSize as string) || 20, 100);
@@ -25,8 +32,8 @@ router.get('/', async (req: Request, res: Response) => {
     position_name: string;
   }
 
-  let where = '1=1';
-  const params: Record<string, unknown> = {};
+  let where = 'a.company_id = @companyId';
+  const params: Record<string, unknown> = { companyId };
 
   if (positionId) {
     where += ' AND a.position_id = @positionId';
@@ -44,10 +51,8 @@ router.get('/', async (req: Request, res: Response) => {
     where += ' AND a.current_round_id = @roundId';
     params.roundId = round;
   }
-
-  // If tag filter is provided, join through applicant_tags
   if (tag) {
-    where += ' AND EXISTS (SELECT 1 FROM applicant_tags at2 JOIN tags t ON at2.tag_id = t.id WHERE at2.application_id = a.id AND t.name = @tagName)';
+    where += ` AND EXISTS (SELECT 1 FROM applicant_tags at2 JOIN tags t ON at2.tag_id = t.id WHERE at2.application_id = a.id AND t.name = @tagName)`;
     params.tagName = tag;
   }
 
@@ -79,9 +84,10 @@ router.get('/', async (req: Request, res: Response) => {
   });
 });
 
-// GET /api/v1/applicants/:id - Get applicant details with decrypted result
+// GET /api/v1/applicants/:id — Get applicant details with decrypted result
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { companyId } = req.auth!;
 
   interface ApplicationDetailRow {
     id: string;
@@ -104,8 +110,8 @@ router.get('/:id', async (req: Request, res: Response) => {
     `SELECT a.*, p.name as position_name, p.criteria
      FROM applications a
      JOIN positions p ON a.position_id = p.id
-     WHERE a.id = ?`,
-    { id },
+     WHERE a.id = ? AND a.company_id = ?`,
+    { id, companyId },
   );
 
   if (!app) {
@@ -161,24 +167,28 @@ router.get('/:id', async (req: Request, res: Response) => {
   });
 });
 
-// PATCH /api/v1/applicants/:id/status - Approve or reject applicant
+// PATCH /api/v1/applicants/:id/status — Approve or reject applicant
 router.patch('/:id/status', async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { status } = req.body;
+  const id = req.params.id as string;
+  const { companyId } = req.auth!;
 
-  if (!['approved', 'rejected'].includes(status)) {
+  const result = statusUpdateSchema.safeParse(req.body);
+  if (!result.success) {
     res.status(400).json({
       success: false,
-      error: 'Status must be "approved" or "rejected"',
+      error: 'Validation failed',
+      details: result.error.flatten().fieldErrors,
     });
     return;
   }
 
-  const existing = getOne<{ id: string }>(
-    'SELECT id FROM applications WHERE id = ?',
+  const { status } = result.data;
+
+  const existing = getOne<{ id: string; company_id: string }>(
+    'SELECT id, company_id FROM applications WHERE id = ?',
     { id },
   );
-  if (!existing) {
+  if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Application not found' });
     return;
   }
@@ -188,7 +198,12 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     { status, id },
   );
 
-  // TODO: Trigger email notification to applicant (§13)
+  // Send email notification to applicant (§13)
+  if (status === 'approved') {
+    sendApprovalEmail(id).catch((err) => console.error('Failed to send approval email:', err));
+  } else if (status === 'rejected') {
+    sendRejectionEmail(id).catch((err) => console.error('Failed to send rejection email:', err));
+  }
 
   res.json({
     success: true,
@@ -201,9 +216,10 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
   });
 });
 
-// POST /api/v1/applicants/:id/tags - Add tag to applicant
+// POST /api/v1/applicants/:id/tags — Add tag to applicant
 router.post('/:id/tags', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { companyId } = req.auth!;
   const { tagId } = req.body;
 
   if (!tagId) {
@@ -211,14 +227,22 @@ router.post('/:id/tags', async (req: Request, res: Response) => {
     return;
   }
 
-  // Verify both exist
-  const app = getOne<{ id: string }>('SELECT id FROM applications WHERE id = ?', { id });
-  if (!app) {
+  // Verify application belongs to company
+  const app = getOne<{ id: string; company_id: string }>(
+    'SELECT id, company_id FROM applications WHERE id = ?',
+    { id },
+  );
+  if (!app || app.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Application not found' });
     return;
   }
-  const tag = getOne<{ id: string }>('SELECT id FROM tags WHERE id = ?', { tagId });
-  if (!tag) {
+
+  // Verify tag belongs to company
+  const tag = getOne<{ id: string; company_id: string }>(
+    'SELECT id, company_id FROM tags WHERE id = ?',
+    { tagId },
+  );
+  if (!tag || tag.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
   }
@@ -231,7 +255,7 @@ router.post('/:id/tags', async (req: Request, res: Response) => {
   res.json({ success: true, message: 'Tag added to applicant', data: { applicantId: id, tagId } });
 });
 
-// DELETE /api/v1/applicants/:id/tags/:tagId - Remove tag from applicant
+// DELETE /api/v1/applicants/:id/tags/:tagId — Remove tag from applicant
 router.delete('/:id/tags/:tagId', async (req: Request, res: Response) => {
   const { id, tagId } = req.params;
 

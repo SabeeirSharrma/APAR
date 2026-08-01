@@ -1,17 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { getOne, getMany, run } from '../db/index.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
+import { createPositionSchema, updatePositionSchema } from '../lib/validation.js';
 
 const router = Router();
 
-// GET /api/v1/positions - List all positions for a company
-router.get('/', async (req: Request, res: Response) => {
-  const { companyId } = req.query;
+// All position routes require auth
+router.use(requireAuth);
 
-  if (!companyId) {
-    res.status(400).json({ success: false, error: 'Missing required query param: companyId' });
-    return;
-  }
+// GET /api/v1/positions — List all positions for a company
+router.get('/', async (req: Request, res: Response) => {
+  const { companyId } = req.auth!;
 
   interface PositionRow {
     id: string;
@@ -34,9 +34,10 @@ router.get('/', async (req: Request, res: Response) => {
   res.json({ success: true, data: positions });
 });
 
-// GET /api/v1/positions/:id - Get position details with interviewers
+// GET /api/v1/positions/:id — Get position details with interviewers
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { companyId } = req.auth!;
 
   interface PositionDetailRow {
     id: string;
@@ -49,8 +50,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 
   const position = getOne<PositionDetailRow>(
-    'SELECT * FROM positions WHERE id = ?',
-    { id },
+    'SELECT * FROM positions WHERE id = ? AND company_id = ?',
+    { id, companyId },
   );
 
   if (!position) {
@@ -79,24 +80,20 @@ router.get('/:id', async (req: Request, res: Response) => {
   });
 });
 
-// POST /api/v1/positions - Create a new position
-router.post('/', async (req: Request, res: Response) => {
-  const { companyId, name, description, criteria } = req.body;
-
-  if (!companyId || !name || !criteria) {
+// POST /api/v1/positions — Create a new position
+router.post('/', requireRole('company_admin'), async (req: Request, res: Response) => {
+  const result = createPositionSchema.safeParse({ ...req.body, companyId: req.auth!.companyId });
+  if (!result.success) {
     res.status(400).json({
       success: false,
-      error: 'Missing required fields: companyId, name, criteria',
+      error: 'Validation failed',
+      details: result.error.flatten().fieldErrors,
     });
     return;
   }
 
-  // Verify company exists
-  const company = getOne<{ id: string }>('SELECT id FROM companies WHERE id = ?', { companyId });
-  if (!company) {
-    res.status(404).json({ success: false, error: 'Company not found' });
-    return;
-  }
+  const { name, description, criteria } = result.data;
+  const companyId = req.auth!.companyId;
 
   const id = randomUUID();
   run(
@@ -112,17 +109,31 @@ router.post('/', async (req: Request, res: Response) => {
   });
 });
 
-// PATCH /api/v1/positions/:id - Update position
-router.patch('/:id', async (req: Request, res: Response) => {
+// PATCH /api/v1/positions/:id — Update position
+router.patch('/:id', requireRole('company_admin'), async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, criteria } = req.body;
+  const { companyId } = req.auth!;
 
-  const existing = getOne<{ id: string }>('SELECT id FROM positions WHERE id = ?', { id });
-  if (!existing) {
+  const result = updatePositionSchema.safeParse(req.body);
+  if (!result.success) {
+    res.status(400).json({
+      success: false,
+      error: 'Validation failed',
+      details: result.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const existing = getOne<{ id: string; company_id: string }>(
+    'SELECT id, company_id FROM positions WHERE id = ?',
+    { id },
+  );
+  if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Position not found' });
     return;
   }
 
+  const { name, description, criteria } = result.data;
   const updates: string[] = [];
   const params: Record<string, unknown> = { id };
 
@@ -135,15 +146,19 @@ router.patch('/:id', async (req: Request, res: Response) => {
     run(`UPDATE positions SET ${updates.join(', ')} WHERE id = @id`, params);
   }
 
-  res.json({ success: true, message: 'Position updated', data: { id, ...(name && { name }), ...(criteria && { criteria }) } });
+  res.json({ success: true, message: 'Position updated', data: { id } });
 });
 
-// DELETE /api/v1/positions/:id - Delete position
-router.delete('/:id', async (req: Request, res: Response) => {
+// DELETE /api/v1/positions/:id — Delete position
+router.delete('/:id', requireRole('company_admin'), async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { companyId } = req.auth!;
 
-  const existing = getOne<{ id: string }>('SELECT id FROM positions WHERE id = ?', { id });
-  if (!existing) {
+  const existing = getOne<{ id: string; company_id: string }>(
+    'SELECT id, company_id FROM positions WHERE id = ?',
+    { id },
+  );
+  if (!existing || existing.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Position not found' });
     return;
   }
@@ -152,9 +167,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
   res.json({ success: true, message: 'Position deleted' });
 });
 
-// POST /api/v1/positions/:id/interviewers - Assign interviewer to position
-router.post('/:id/interviewers', async (req: Request, res: Response) => {
+// POST /api/v1/positions/:id/interviewers — Assign interviewer to position
+router.post('/:id/interviewers', requireRole('company_admin'), async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { companyId } = req.auth!;
   const { interviewerId } = req.body;
 
   if (!interviewerId) {
@@ -162,14 +178,20 @@ router.post('/:id/interviewers', async (req: Request, res: Response) => {
     return;
   }
 
-  const position = getOne<{ id: string }>('SELECT id FROM positions WHERE id = ?', { id });
-  if (!position) {
+  const position = getOne<{ id: string; company_id: string }>(
+    'SELECT id, company_id FROM positions WHERE id = ?',
+    { id },
+  );
+  if (!position || position.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Position not found' });
     return;
   }
 
-  const interviewer = getOne<{ id: string }>('SELECT id FROM interviewers WHERE id = ?', { interviewerId });
-  if (!interviewer) {
+  const interviewer = getOne<{ id: string; company_id: string }>(
+    'SELECT id, company_id FROM interviewers WHERE id = ?',
+    { interviewerId },
+  );
+  if (!interviewer || interviewer.company_id !== companyId) {
     res.status(404).json({ success: false, error: 'Interviewer not found' });
     return;
   }
@@ -182,8 +204,8 @@ router.post('/:id/interviewers', async (req: Request, res: Response) => {
   res.json({ success: true, message: 'Interviewer assigned to position', data: { positionId: id, interviewerId } });
 });
 
-// DELETE /api/v1/positions/:id/interviewers/:interviewerId - Remove interviewer from position
-router.delete('/:id/interviewers/:interviewerId', async (req: Request, res: Response) => {
+// DELETE /api/v1/positions/:id/interviewers/:interviewerId — Remove interviewer from position
+router.delete('/:id/interviewers/:interviewerId', requireRole('company_admin'), async (req: Request, res: Response) => {
   const { id, interviewerId } = req.params;
 
   run(

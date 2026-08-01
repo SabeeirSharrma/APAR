@@ -2,26 +2,41 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { initDb } from './db/index.js';
+import { errorHandler, notFoundHandler } from './middleware/error.js';
+import { apiLimiter } from './middleware/rateLimit.js';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize database
+initDb();
 
 // Create Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(helmet());
+// __dirname for ESM
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Global middleware
+app.use(helmet({ contentSecurityPolicy: false })); // Disable CSP for inline scripts in HTML
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use('/api', apiLimiter);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+// Serve static files (frontend UIs)
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Health check endpoint (outside rate limiter)
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '0.1.0'
+    version: '0.1.0',
   });
 });
 
@@ -30,12 +45,13 @@ import apiRoutes from './routes/index.js';
 app.use('/api/v1', apiRoutes);
 
 // API info endpoint
-app.get('/api/v1', (req, res) => {
+app.get('/api/v1', (_req, res) => {
   res.json({
     message: 'APAR API v1',
     version: '0.1.0',
     endpoints: {
       health: '/health',
+      auth: '/api/v1/auth',
       upload: '/api/v1/upload',
       applicants: '/api/v1/applicants',
       positions: '/api/v1/positions',
@@ -44,20 +60,22 @@ app.get('/api/v1', (req, res) => {
       tags: '/api/v1/tags',
       notes: '/api/v1/notes',
       messages: '/api/v1/messages',
-      setup: '/api/v1/setup'
-    }
+      setup: '/api/v1/setup',
+      features: '/api/v1/features',
+    },
+    frontend: {
+      apply: '/apply.html',
+      admin: '/admin.html',
+      interviewer: '/interviewer.html',
+    },
   });
 });
 
-// Error handling middleware
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err.message);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
+// 404 handler
+app.use(notFoundHandler);
+
+// Global error handler (must be last)
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {

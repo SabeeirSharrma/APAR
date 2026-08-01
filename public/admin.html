@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APAR Admin Panel</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
+    .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .login-box { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 40px; max-width: 400px; width: 100%; margin: 20px; }
+    .login-box h1 { font-size: 24px; margin-bottom: 4px; }
+    .login-box .subtitle { color: #64748b; margin-bottom: 24px; font-size: 14px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-weight: 500; margin-bottom: 4px; font-size: 14px; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+    input:focus { outline: none; border-color: #3b82f6; }
+    .btn { width: 100%; padding: 10px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }
+    .btn:hover { background: #2563eb; }
+    .btn-sm { width: auto; padding: 6px 12px; font-size: 12px; }
+    .btn-danger { background: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-success { background: #22c55e; }
+    .btn-success:hover { background: #16a34a; }
+    .error { color: #dc2626; font-size: 13px; margin-top: 8px; display: none; }
+
+    /* Layout */
+    .app { display: none; }
+    .app.active { display: flex; }
+    .sidebar { width: 240px; background: #0f172a; color: white; min-height: 100vh; padding: 20px 0; position: fixed; }
+    .sidebar h2 { padding: 0 20px 20px; font-size: 18px; border-bottom: 1px solid #1e293b; }
+    .sidebar nav { padding: 12px 0; }
+    .sidebar nav a { display: block; padding: 10px 20px; color: #94a3b8; text-decoration: none; font-size: 14px; transition: all 0.2s; }
+    .sidebar nav a:hover, .sidebar nav a.active { color: white; background: #1e293b; }
+    .main { margin-left: 240px; padding: 24px; flex: 1; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .header h1 { font-size: 22px; }
+    .card { background: white; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 16px; }
+    .card h3 { font-size: 16px; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    th { font-weight: 500; color: #64748b; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .badge-green { background: #dcfce7; color: #16a34a; }
+    .badge-yellow { background: #fef9c3; color: #a16207; }
+    .badge-red { background: #fee2e2; color: #dc2626; }
+    .badge-blue { background: #dbeafe; color: #2563eb; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .stat-card .label { font-size: 13px; color: #64748b; }
+    .stat-card .value { font-size: 28px; font-weight: 600; margin-top: 4px; }
+    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
+    .modal.active { display: flex; }
+    .modal-content { background: white; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
+    .modal-content h2 { margin-bottom: 16px; font-size: 18px; }
+    .inline-form { display: flex; gap: 8px; align-items: end; }
+    .inline-form .form-group { margin-bottom: 0; flex: 1; }
+  </style>
+</head>
+<body>
+  <!-- Login View -->
+  <div id="login-view" class="login-container">
+    <div class="login-box">
+      <h1>APAR Admin</h1>
+      <p class="subtitle">Sign in to your admin panel</p>
+      <div class="error" id="login-error"></div>
+      <form id="login-form">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" required placeholder="admin@company.com">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-password" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn">Sign In</button>
+      </form>
+      <p style="margin-top: 16px; text-align: center; font-size: 13px;">
+        <a href="#" onclick="showRegister()" style="color: #3b82f6;">Register new company</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Register View -->
+  <div id="register-view" class="login-container" style="display: none;">
+    <div class="login-box">
+      <h1>Register Company</h1>
+      <p class="subtitle">Create your APAR instance</p>
+      <div class="error" id="register-error"></div>
+      <form id="register-form">
+        <div class="form-group">
+          <label>Company Name</label>
+          <input type="text" id="reg-name" required placeholder="Acme Corp">
+        </div>
+        <div class="form-group">
+          <label>Admin Email</label>
+          <input type="email" id="reg-email" required placeholder="admin@acme.com">
+        </div>
+        <div class="form-group">
+          <label>Admin Name</label>
+          <input type="text" id="reg-admin-name" required placeholder="John Admin">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="reg-password" required minlength="8" placeholder="Min 8 characters">
+        </div>
+        <div class="form-group">
+          <label>Submission Email</label>
+          <input type="email" id="reg-submission-email" required placeholder="careers@acme.com">
+        </div>
+        <button type="submit" class="btn">Register</button>
+      </form>
+      <p style="margin-top: 16px; text-align: center; font-size: 13px;">
+        <a href="#" onclick="showLogin()" style="color: #3b82f6;">Already have an account? Sign in</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app" class="app">
+    <div class="sidebar">
+      <h2>APAR Admin</h2>
+      <nav>
+        <a href="#" class="active" onclick="showSection('dashboard')">Dashboard</a>
+        <a href="#" onclick="showSection('positions')">Positions</a>
+        <a href="#" onclick="showSection('interviewers')">Interviewers</a>
+        <a href="#" onclick="showSection('applicants')">Applicants</a>
+        <a href="#" onclick="showSection('rounds')">Rounds</a>
+        <a href="#" onclick="showSection('tags')">Tags</a>
+        <a href="#" onclick="showSection('features')">Features</a>
+        <a href="#" onclick="showSection('settings')">Settings</a>
+      </nav>
+      <nav style="position: absolute; bottom: 0; width: 100%;">
+        <a href="#" onclick="logout()">Sign Out</a>
+      </nav>
+    </div>
+
+    <div class="main">
+      <!-- Dashboard -->
+      <div id="section-dashboard" class="section">
+        <div class="header"><h1>Dashboard</h1></div>
+        <div class="stats" id="stats"></div>
+        <div class="card">
+          <h3>Recent Applications</h3>
+          <table><thead><tr><th>Name</th><th>Position</th><th>Status</th><th>Date</th></tr></thead><tbody id="recent-apps"></tbody></table>
+        </div>
+      </div>
+
+      <!-- Positions -->
+      <div id="section-positions" class="section" style="display:none;">
+        <div class="header">
+          <h1>Positions</h1>
+          <button class="btn btn-sm" onclick="showModal('position-modal')">+ New Position</button>
+        </div>
+        <div class="card"><table><thead><tr><th>Name</th><th>Criteria</th><th>Applicants</th><th>Actions</th></tr></thead><tbody id="positions-list"></tbody></table></div>
+      </div>
+
+      <!-- Interviewers -->
+      <div id="section-interviewers" class="section" style="display:none;">
+        <div class="header">
+          <h1>Interviewers</h1>
+          <button class="btn btn-sm" onclick="showModal('interviewer-modal')">+ Add Interviewer</button>
+        </div>
+        <div class="card"><table><thead><tr><th>Name</th><th>Email</th><th>Positions</th><th>Workload</th><th>Actions</th></tr></thead><tbody id="interviewers-list"></tbody></table></div>
+      </div>
+
+      <!-- Applicants -->
+      <div id="section-applicants" class="section" style="display:none;">
+        <div class="header"><h1>Applicants</h1></div>
+        <div class="card">
+          <div class="inline-form" style="margin-bottom: 16px;">
+            <div class="form-group"><select id="filter-status" onchange="loadApplicants()"><option value="">All Status</option><option value="queued">Queued</option><option value="processing">Processing</option><option value="delivered">Delivered</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></div>
+            <div class="form-group"><select id="filter-position" onchange="loadApplicants()"><option value="">All Positions</option></select></div>
+          </div>
+          <table><thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Status</th><th>Assigned To</th><th>Date</th><th>Actions</th></tr></thead><tbody id="applicants-list"></tbody></table>
+        </div>
+      </div>
+
+      <!-- Rounds -->
+      <div id="section-rounds" class="section" style="display:none;">
+        <div class="header">
+          <h1>Rounds</h1>
+          <button class="btn btn-sm" onclick="showModal('round-modal')">+ New Round</button>
+        </div>
+        <div class="card"><table><thead><tr><th>#</th><th>Name</th><th>Interviewers</th><th>Applicants</th><th>Actions</th></tr></thead><tbody id="rounds-list"></tbody></table></div>
+      </div>
+
+      <!-- Tags -->
+      <div id="section-tags" class="section" style="display:none;">
+        <div class="header">
+          <h1>Tags</h1>
+          <button class="btn btn-sm" onclick="showModal('tag-modal')">+ New Tag</button>
+        </div>
+        <div class="card"><table><thead><tr><th>Name</th><th>Color</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead><tbody id="tags-list"></tbody></table></div>
+      </div>
+
+      <!-- Features -->
+      <div id="section-features" class="section" style="display:none;">
+        <div class="header"><h1>Feature Toggles</h1></div>
+        <div class="card" id="features-list"></div>
+      </div>
+
+      <!-- Settings -->
+      <div id="section-settings" class="section" style="display:none;">
+        <div class="header"><h1>Settings</h1></div>
+        <div class="card"><h3>Setup Status</h3><div id="setup-status"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <div class="modal" id="position-modal">
+    <div class="modal-content">
+      <h2>Create Position</h2>
+      <form onsubmit="createPosition(event)">
+        <div class="form-group"><label>Name</label><input type="text" id="pos-name" required></div>
+        <div class="form-group"><label>Description</label><input type="text" id="pos-desc"></div>
+        <div class="form-group"><label>Criteria</label><textarea id="pos-criteria" required style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;min-height:100px;"></textarea></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;"><button type="button" class="btn btn-sm" style="background:#64748b;" onclick="hideModal('position-modal')">Cancel</button><button type="submit" class="btn btn-sm">Create</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="interviewer-modal">
+    <div class="modal-content">
+      <h2>Add Interviewer</h2>
+      <form onsubmit="createInterviewer(event)">
+        <div class="form-group"><label>Email</label><input type="email" id="int-email" required></div>
+        <div class="form-group"><label>Name</label><input type="text" id="int-name" required></div>
+        <div class="form-group"><label>Position IDs (comma-separated)</label><input type="text" id="int-positions" required placeholder="uuid1,uuid2"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;"><button type="button" class="btn btn-sm" style="background:#64748b;" onclick="hideModal('interviewer-modal')">Cancel</button><button type="submit" class="btn btn-sm">Create</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="round-modal">
+    <div class="modal-content">
+      <h2>Create Round</h2>
+      <form onsubmit="createRound(event)">
+        <div class="form-group"><label>Round Number</label><input type="number" id="round-number" required min="1"></div>
+        <div class="form-group"><label>Name</label><input type="text" id="round-name" required></div>
+        <div class="form-group"><label>Description</label><input type="text" id="round-desc"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;"><button type="button" class="btn btn-sm" style="background:#64748b;" onclick="hideModal('round-modal')">Cancel</button><button type="submit" class="btn btn-sm">Create</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="tag-modal">
+    <div class="modal-content">
+      <h2>Create Tag</h2>
+      <form onsubmit="createTag(event)">
+        <div class="form-group"><label>Name</label><input type="text" id="tag-name" required></div>
+        <div class="form-group"><label>Color</label><input type="color" id="tag-color" value="#6B7280" required></div>
+        <div class="form-group"><label>Scope</label><select id="tag-scope"><option value="global">Global</option><option value="local">Local</option></select></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;"><button type="button" class="btn btn-sm" style="background:#64748b;" onclick="hideModal('tag-modal')">Cancel</button><button type="submit" class="btn btn-sm">Create</button></div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API = window.location.origin + '/api/v1';
+    let token = localStorage.getItem('apar_token');
+    let companyId = localStorage.getItem('apar_company_id');
+
+    // --- Auth ---
+    async function apiCall(method, path, body) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(`${API}${path}`, opts);
+      return res.json();
+    }
+
+    document.getElementById('login-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const data = await apiCall('POST', '/auth/login', {
+        email: document.getElementById('login-email').value,
+        password: document.getElementById('login-password').value,
+      });
+      if (data.success) {
+        token = data.data.token;
+        companyId = data.data.companyId;
+        localStorage.setItem('apar_token', token);
+        localStorage.setItem('apar_company_id', companyId);
+        showApp();
+      } else {
+        showErr('login-error', data.error);
+      }
+    };
+
+    document.getElementById('register-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const data = await apiCall('POST', '/auth/register', {
+        name: document.getElementById('reg-name').value,
+        adminEmail: document.getElementById('reg-email').value,
+        adminName: document.getElementById('reg-admin-name').value,
+        password: document.getElementById('reg-password').value,
+        submissionEmail: document.getElementById('reg-submission-email').value,
+      });
+      if (data.success) {
+        token = data.data.token;
+        companyId = data.data.companyId;
+        localStorage.setItem('apar_token', token);
+        localStorage.setItem('apar_company_id', companyId);
+        showApp();
+      } else {
+        showErr('register-error', data.error);
+      }
+    };
+
+    function showErr(id, msg) { const el = document.getElementById(id); el.textContent = msg; el.style.display = 'block'; }
+    function showLogin() { document.getElementById('login-view').style.display = 'flex'; document.getElementById('register-view').style.display = 'none'; }
+    function showRegister() { document.getElementById('login-view').style.display = 'none'; document.getElementById('register-view').style.display = 'flex'; }
+    function logout() { localStorage.removeItem('apar_token'); localStorage.removeItem('apar_company_id'); location.reload(); }
+    function showModal(id) { document.getElementById(id).classList.add('active'); }
+    function hideModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    // --- App Init ---
+    if (token) showApp(); else showLogin();
+
+    async function showApp() {
+      document.getElementById('login-view').style.display = 'none';
+      document.getElementById('register-view').style.display = 'none';
+      document.getElementById('app').classList.add('active');
+      loadDashboard();
+    }
+
+    // --- Navigation ---
+    function showSection(name) {
+      document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+      document.getElementById(`section-${name}`).style.display = 'block';
+      document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
+      event.target.classList.add('active');
+      const loaders = { dashboard: loadDashboard, positions: loadPositions, interviewers: loadInterviewers, applicants: loadApplicants, rounds: loadRounds, tags: loadTags, features: loadFeatures, settings: loadSettings };
+      if (loaders[name]) loaders[name]();
+    }
+
+    // --- Dashboard ---
+    async function loadDashboard() {
+      const [apps, positions] = await Promise.all([apiCall('GET', '/applicants?pageSize=100'), apiCall('GET', '/positions')]);
+      if (!apps.success || !positions.success) return;
+      const items = apps.data.items;
+      const stats = document.getElementById('stats');
+      const counts = { queued: 0, processing: 0, delivered: 0, approved: 0, rejected: 0 };
+      items.forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++; });
+      stats.innerHTML = `
+        <div class="stat-card"><div class="label">Total Applications</div><div class="value">${items.length}</div></div>
+        <div class="stat-card"><div class="label">Pending Review</div><div class="value">${counts.delivered}</div></div>
+        <div class="stat-card"><div class="label">Approved</div><div class="value" style="color:#16a34a">${counts.approved}</div></div>
+        <div class="stat-card"><div class="label">Rejected</div><div class="value" style="color:#dc2626">${counts.rejected}</div></div>
+        <div class="stat-card"><div class="label">Positions</div><div class="value">${positions.data.length}</div></div>
+      `;
+      const tbody = document.getElementById('recent-apps');
+      tbody.innerHTML = items.slice(0, 10).map(a => `<tr><td>${a.name}</td><td>${a.position_name || '-'}</td><td><span class="badge badge-${statusColor(a.status)}">${a.status}</span></td><td>${new Date(a.created_at).toLocaleDateString()}</td></tr>`).join('');
+    }
+
+    function statusColor(s) { return { queued: 'yellow', processing: 'yellow', delivered: 'blue', approved: 'green', rejected: 'red' }[s] || 'blue'; }
+
+    // --- Positions ---
+    async function loadPositions() {
+      const data = await apiCall('GET', '/positions');
+      if (!data.success) return;
+      document.getElementById('positions-list').innerHTML = data.data.map(p => `<tr><td>${p.name}</td><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.criteria}</td><td>${p.applicant_count}</td><td><button class="btn btn-sm btn-danger" onclick="deletePosition('${p.id}')">Delete</button></td></tr>`).join('');
+    }
+
+    async function createPosition(e) {
+      e.preventDefault();
+      await apiCall('POST', '/positions', { name: document.getElementById('pos-name').value, description: document.getElementById('pos-desc').value, criteria: document.getElementById('pos-criteria').value });
+      hideModal('position-modal'); loadPositions();
+    }
+
+    async function deletePosition(id) { if (confirm('Delete this position?')) { await apiCall('DELETE', `/positions/${id}`); loadPositions(); } }
+
+    // --- Interviewers ---
+    async function loadInterviewers() {
+      const data = await apiCall('GET', '/interviewers');
+      if (!data.success) return;
+      document.getElementById('interviewers-list').innerHTML = data.data.map(i => `<tr><td>${i.name}</td><td>${i.email}</td><td>${i.positionCount}</td><td>${i.currentWorkload}</td><td><button class="btn btn-sm btn-danger" onclick="deleteInterviewer('${i.id}')">Delete</button></td></tr>`).join('');
+    }
+
+    async function createInterviewer(e) {
+      e.preventDefault();
+      const posIds = document.getElementById('int-positions').value.split(',').map(s => s.trim());
+      await apiCall('POST', '/interviewers', { email: document.getElementById('int-email').value, name: document.getElementById('int-name').value, positionIds: posIds });
+      hideModal('interviewer-modal'); loadInterviewers();
+    }
+
+    async function deleteInterviewer(id) { if (confirm('Delete this interviewer? Their applicants will be reassigned.')) { await apiCall('DELETE', `/interviewers/${id}`); loadInterviewers(); } }
+
+    // --- Applicants ---
+    async function loadApplicants() {
+      const status = document.getElementById('filter-status').value;
+      const pos = document.getElementById('filter-position').value;
+      let q = '/applicants?pageSize=50';
+      if (status) q += `&status=${status}`;
+      if (pos) q += `&positionId=${pos}`;
+      const data = await apiCall('GET', q);
+      if (!data.success) return;
+      document.getElementById('applicants-list').innerHTML = data.data.items.map(a => `<tr><td>${a.name}</td><td>${a.email}</td><td>${a.position_name || '-'}</td><td><span class="badge badge-${statusColor(a.status)}">${a.status}</span></td><td>${a.assigned_interviewer_id ? a.assigned_interviewer_id.slice(0,8)+'...' : '-'}</td><td>${new Date(a.created_at).toLocaleDateString()}</td><td><button class="btn btn-sm btn-success" onclick="updateStatus('${a.id}','approved')">Approve</button> <button class="btn btn-sm btn-danger" onclick="updateStatus('${a.id}','rejected')">Reject</button></td></tr>`).join('');
+    }
+
+    async function updateStatus(id, status) { await apiCall('PATCH', `/applicants/${id}/status`, { status }); loadApplicants(); loadDashboard(); }
+
+    // --- Rounds ---
+    async function loadRounds() {
+      const data = await apiCall('GET', '/rounds');
+      if (!data.success) return;
+      document.getElementById('rounds-list').innerHTML = data.data.map(r => `<tr><td>${r.round_number}</td><td>${r.name}</td><td>${r.interviewerCount}</td><td>${r.applicantCount}</td><td><button class="btn btn-sm btn-danger" onclick="deleteRound('${r.id}')">Delete</button></td></tr>`).join('');
+    }
+
+    async function createRound(e) {
+      e.preventDefault();
+      await apiCall('POST', '/rounds', { roundNumber: parseInt(document.getElementById('round-number').value), name: document.getElementById('round-name').value, description: document.getElementById('round-desc').value });
+      hideModal('round-modal'); loadRounds();
+    }
+
+    async function deleteRound(id) { if (confirm('Delete this round?')) { await apiCall('DELETE', `/rounds/${id}`); loadRounds(); } }
+
+    // --- Tags ---
+    async function loadTags() {
+      const data = await apiCall('GET', '/tags');
+      if (!data.success) return;
+      document.getElementById('tags-list').innerHTML = data.data.map(t => `<tr><td>${t.name}</td><td><span style="display:inline-block;width:16px;height:16px;background:${t.color};border-radius:4px;vertical-align:middle;"></span></td><td>${t.scope}</td><td>${t.is_approved ? '<span class="badge badge-green">Approved</span>' : '<span class="badge badge-yellow">Pending</span>'}</td><td>${t.scope === 'global' && !t.is_approved ? `<button class="btn btn-sm btn-success" onclick="approveTag('${t.id}')">Approve</button> ` : ''}<button class="btn btn-sm btn-danger" onclick="deleteTag('${t.id}')">Delete</button></td></tr>`).join('');
+    }
+
+    async function createTag(e) {
+      e.preventDefault();
+      await apiCall('POST', '/tags', { name: document.getElementById('tag-name').value, color: document.getElementById('tag-color').value, scope: document.getElementById('tag-scope').value });
+      hideModal('tag-modal'); loadTags();
+    }
+
+    async function approveTag(id) { await apiCall('POST', `/tags/${id}/approve`); loadTags(); }
+    async function deleteTag(id) { if (confirm('Delete this tag?')) { await apiCall('DELETE', `/tags/${id}`); loadTags(); } }
+
+    // --- Features ---
+    async function loadFeatures() {
+      const data = await apiCall('GET', '/features');
+      if (!data.success) return;
+      const labels = { recording: 'Screen/Audio Recording', 'interviewer-chat': 'Interviewer Chat', 'interviewer-analytics': 'Interviewer Analytics', 'background-checks': 'Background Checks' };
+      document.getElementById('features-list').innerHTML = data.data.map(f => `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f1f5f9;"><span>${labels[f.feature] || f.feature}</span><label style="position:relative;display:inline-block;width:48px;height:24px;"><input type="checkbox" ${f.isEnabled ? 'checked' : ''} onchange="toggleFeature('${f.feature}', this.checked)" style="opacity:0;width:0;height:0;"><span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:${f.isEnabled ? '#3b82f6' : '#cbd5e1'};border-radius:12px;transition:0.3s;"><span style="position:absolute;content:'';height:18px;width:18px;left:${f.isEnabled ? '26px' : '3px'};bottom:3px;background:white;border-radius:50%;transition:0.3s;"></span></span></label></div>`).join('');
+    }
+
+    async function toggleFeature(feature, enabled) { await apiCall('PATCH', '/features', { feature, isEnabled: enabled }); loadFeatures(); }
+
+    // --- Settings ---
+    async function loadSettings() {
+      const data = await apiCall('GET', '/setup/status');
+      if (!data.success) return;
+      document.getElementById('setup-status').innerHTML = data.data.steps.map(s => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;"><span style="width:20px;height:20px;border-radius:50%;background:${s.isCompleted ? '#22c55e' : '#e2e8f0'};display:flex;align-items:center;justify-content:center;color:white;font-size:12px;">${s.isCompleted ? '✓' : ''}</span><span>${s.name}</span></div>`).join('');
+    }
+  </script>
+</body>
+</html>

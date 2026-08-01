@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS interviewers (
   company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   name TEXT NOT NULL,
-  public_key TEXT NOT NULL,
+  password_hash TEXT NOT NULL DEFAULT '',
+  public_key TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(company_id, email)
