@@ -1,0 +1,85 @@
+<section class="card">
+    <div class="badge">
+        🚧 WORK IN PROGRESS
+    </div>
+
+    <h2>Something exciting is being built.</h2>
+
+    <p>
+        APAR's website is currently under development.
+        Check back soon for updates.
+    </p>
+
+    <div class="loader">
+        <span></span>
+    </div>
+</section>
+
+<style>
+.card{
+    width:min(720px,90%);
+    margin:auto;
+    padding:3.5rem;
+
+    background:rgba(16,19,29,.7);
+    backdrop-filter:blur(16px);
+
+    border:1px solid var(--border);
+    border-radius:24px;
+
+    text-align:center;
+
+    box-shadow:
+        0 10px 40px rgba(0,0,0,.35);
+}
+
+.badge{
+    display:inline-block;
+    padding:.55rem 1rem;
+    border-radius:999px;
+    background:#16203b;
+    color:#8ec5ff;
+    margin-bottom:1.5rem;
+    font-size:.85rem;
+}
+
+h2{
+    font-size:2.4rem;
+    margin-bottom:1rem;
+}
+
+p{
+    color:var(--muted);
+    line-height:1.7;
+    max-width:550px;
+    margin:0 auto 2rem;
+}
+
+.loader{
+    width:220px;
+    height:6px;
+    margin:auto;
+
+    background:#1b2030;
+    border-radius:999px;
+    overflow:hidden;
+}
+
+.loader span{
+    display:block;
+    width:35%;
+    height:100%;
+    background: #6ea8ff;
+
+    animation:slide 2s infinite ease-in-out;
+}
+
+@keyframes slide{
+    from{
+        transform:translateX(-100%);
+    }
+    to{
+        transform:translateX(320%);
+    }
+}
+</style>

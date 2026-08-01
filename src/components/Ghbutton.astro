@@ -1,0 +1,61 @@
+---
+const {
+  href = "https://github.com/SabeeirSharrma/APAR"
+} = Astro.props;
+---
+
+<a class="github-btn" href={href} target="_blank" rel="noopener noreferrer">
+    <svg
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        fill="currentColor"
+    >
+        <path d="M8 0C3.58 0 0 3.58 0 8a8.01 8.01 0 005.47 7.59c.4.07.55-.17.55-.39v-1.37c-2.23.49-2.69-.95-2.69-.95-.36-.92-.89-1.16-.89-1.16-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.67.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.58.82-2.14-.08-.2-.36-1.02.08-2.13 0 0 .67-.21 2.2.82A7.7 7.7 0 018 4.85a7.7 7.7 0 012 .27c1.53-1.03 2.2-.82 2.2-.82.44 1.11.16 1.93.08 2.13.51.56.82 1.27.82 2.14 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .22.15.47.55.39A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/>
+    </svg>
+
+    <span>View on GitHub</span>
+</a>
+
+<style>
+.github-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:.75rem;
+
+    padding:.85rem 1.4rem;
+
+    border-radius:14px;
+
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12);
+
+    color:#fff;
+    text-decoration:none;
+    font-weight:600;
+
+    transition:
+        transform .2s ease,
+        background .2s ease,
+        border-color .2s ease,
+        box-shadow .2s ease;
+}
+
+.github-btn:hover{
+    transform:translateY(-2px);
+
+    background:rgba(255,255,255,.08);
+    border-color:#6ea8ff;
+
+    box-shadow:
+        0 8px 30px rgba(110,168,255,.25);
+}
+
+.github-btn svg{
+    width:20px;
+    height:20px;
+}
+
+.github-btn:active{
+    transform:translateY(0);
+}
+</style>

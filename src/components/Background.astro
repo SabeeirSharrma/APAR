@@ -1,0 +1,47 @@
+<div class="background">
+    <div class="blob one"></div>
+    <div class="blob two"></div>
+    <div class="grid"></div>
+</div>
+
+<style>
+.background{
+    position:fixed;
+    inset:0;
+    overflow:hidden;
+    z-index:-1;
+}
+
+.grid{
+    position:absolute;
+    inset:0;
+
+    background-image:
+        linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+
+    background-size:60px 60px;
+    mask-image:radial-gradient(circle,white,transparent 85%);
+}
+
+.blob{
+    position:absolute;
+    width:500px;
+    height:500px;
+    border-radius:50%;
+    filter:blur(100px);
+    opacity:.22;
+}
+
+.one{
+    background:#2b7fff;
+    top:-180px;
+    left:-120px;
+}
+
+.two{
+    background:#8b5cf6;
+    right:-180px;
+    bottom:-180px;
+}
+</style>
