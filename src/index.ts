@@ -44,6 +44,11 @@ app.use('/api', apiLimiter);
 // Serve static files (frontend UIs)
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Root redirect → admin panel
+app.get('/', (_req, res) => {
+  res.redirect('/admin.html');
+});
+
 // Health check endpoint (outside rate limiter, no DB required)
 app.get('/health', (_req, res) => {
   res.json({
