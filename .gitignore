@@ -34,3 +34,4 @@ coverage/
 
 **.lock
 **/target
+**/.transit-cache.json
