@@ -6,6 +6,8 @@ import { SCHEMA_SQL } from './schema.js';
 // ============================================================================
 // Database Connection (§9.1 — SQLite default)
 // ============================================================================
+// DB is lazy — only created on first actual query. Server starts clean
+// without any DB file. Health, docs, and info endpoints work without DB.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../../apar.db');
@@ -14,6 +16,7 @@ let db: Database.Database | null = null;
 
 /**
  * Get or create the SQLite database connection.
+ * Creates the file and runs schema on first access.
  */
 export function getDb(): Database.Database {
   if (!db) {
@@ -21,19 +24,26 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.pragma('busy_timeout = 5000');
+    db.exec(SCHEMA_SQL);
+    console.log('✅ Database initialized');
   }
   return db;
 }
 
 /**
- * Initialize the database schema (run on startup).
- * Idempotent — safe to call multiple times.
+ * Check if the database has been initialized (without creating it).
+ */
+export function isDbReady(): boolean {
+  return db !== null;
+}
+
+/**
+ * Initialize the database schema (run on startup if needed).
+ * Now a no-op — schema runs lazily on first getDb() call.
+ * Kept for backward compatibility.
  */
 export function initDb(): Database.Database {
-  const database = getDb();
-  database.exec(SCHEMA_SQL);
-  console.log('✅ Database initialized');
-  return database;
+  return getDb();
 }
 
 /**

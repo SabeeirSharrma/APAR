@@ -33,3 +33,4 @@ coverage/
 *.sqlite3
 
 **.lock
+**/target

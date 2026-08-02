@@ -1,4 +1,4 @@
-import { getMany, run } from '../db/index.js';
+import { getMany, run, isDbReady } from '../db/index.js';
 import { runPipeline, type PipelineContext } from './pipeline.js';
 
 // ============================================================================
@@ -26,6 +26,9 @@ let retryTimer: ReturnType<typeof setInterval> | null = null;
  * Stops retrying after MAX_RETRIES attempts.
  */
 async function processRetries(): Promise<void> {
+  // Skip if no database yet (server started but no one registered)
+  if (!isDbReady()) return;
+
   try {
     const queued = getMany<QueuedApplication>(
       `SELECT id, position_id, company_id, email, name, resume_path, supplementary_info, retry_count

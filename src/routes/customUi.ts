@@ -298,12 +298,12 @@ router.get('/:platform/check-update', requireAuth, (req: Request, res: Response)
 });
 
 // ============================================================================
-// GET /api/v1/custom-ui/:platform/files/:filePath — Serve a specific file
+// GET /api/v1/custom-ui/:platform/files/* — Serve a specific file
 // ============================================================================
-router.get('/:platform/files/*', requireAuth, (req: Request, res: Response) => {
+router.get('/:platform/files/{*filePath}', requireAuth, (req: Request, res: Response) => {
   const companyId = getCompanyId(req);
   const platform = req.params.platform as string;
-  const filePath = (req.params as any)[0] as string; // wildcard match
+  const filePath = req.params.filePath as string;
 
   if (!PLATFORMS.includes(platform as Platform)) {
     res.status(400).json({ success: false, error: `Invalid platform` });

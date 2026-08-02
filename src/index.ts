@@ -5,17 +5,16 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { initDb } from './db/index.js';
+import swaggerUi from 'swagger-ui-express';
+import { isDbReady } from './db/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { startRetryWorker } from './lib/retryWorker.js';
 import { initTransit } from './lib/transit.js';
+import swaggerSpec from './lib/swagger.js';
 
 // Load environment variables
 dotenv.config();
-
-// Initialize database
-initDb();
 
 // Initialize Transit native modules (non-blocking)
 initTransit().catch(err => {
@@ -45,13 +44,23 @@ app.use('/api', apiLimiter);
 // Serve static files (frontend UIs)
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Health check endpoint (outside rate limiter)
+// Health check endpoint (outside rate limiter, no DB required)
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     version: '0.1.0',
+    database: isDbReady() ? 'connected' : 'not initialized',
   });
+});
+
+// Swagger API docs — no DB required
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'APAR API Docs',
+}));
+app.get('/docs.json', (_req, res) => {
+  res.json(swaggerSpec);
 });
 
 // API routes
@@ -62,13 +71,15 @@ app.use('/api/v1', apiRoutes);
 // Public status endpoint — no auth required (#5)
 app.use('/api/v1/status', statusRoutes);
 
-// API info endpoint
+// API info endpoint — redirects to Swagger docs
 app.get('/api/v1', (_req, res) => {
   res.json({
     message: 'APAR API v1',
     version: '0.1.0',
+    docs: '/docs',
+    docsJson: '/docs.json',
+    health: '/health',
     endpoints: {
-      health: '/health',
       auth: '/api/v1/auth',
       upload: '/api/v1/upload',
       applicants: '/api/v1/applicants',
@@ -98,13 +109,14 @@ app.use(notFoundHandler);
 // Global error handler (must be last)
 app.use(errorHandler);
 
-// Start server
+// Start server — no DB initialization, that happens lazily on first query
 app.listen(PORT, () => {
   console.log(`- APAR API server running on port ${PORT}`);
-  console.log(`- API docs: http://localhost:${PORT}/api/v1`);
+  console.log(`- API docs: http://localhost:${PORT}/docs`);
+  console.log(`- Swagger JSON: http://localhost:${PORT}/docs.json`);
   console.log(`- Health check: http://localhost:${PORT}/health`);
 
-  // Start background retry worker
+  // Start background retry worker (needs DB — starts lazily)
   startRetryWorker();
 });
 
