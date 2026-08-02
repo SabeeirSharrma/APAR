@@ -370,6 +370,38 @@ router.get('/model-configs', async (req: Request, res: Response) => {
   });
 });
 
+// GET /api/v1/setup/schema — Get database schema SQL for manual setup
+import { SCHEMA_SQL } from '../db/schema.js';
+router.get('/schema', async (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: {
+      sqlite: SCHEMA_SQL,
+      postgresql: SCHEMA_SQL.replace(/INTEGER NOT NULL DEFAULT 0/g, 'INTEGER NOT NULL DEFAULT 0')
+        .replace(/datetime\('now'\)/g, "NOW()")
+        .replace(/TEXT PRIMARY KEY NOT NULL/g, 'TEXT PRIMARY KEY'),
+      mysql: SCHEMA_SQL.replace(/INTEGER NOT NULL DEFAULT 0/g, 'INT NOT NULL DEFAULT 0')
+        .replace(/datetime\('now'\)/g, 'NOW()')
+        .replace(/TEXT PRIMARY KEY NOT NULL/g, 'VARCHAR(36) PRIMARY KEY')
+        .replace(/TEXT NOT NULL/g, 'VARCHAR(255) NOT NULL')
+        .replace(/TEXT UNIQUE NOT NULL/g, 'VARCHAR(255) UNIQUE NOT NULL')
+        .replace(/REFERENCES.*ON DELETE CASCADE/g, '')
+        .replace(/REFERENCES.*ON DELETE SET NULL/g, '')
+        .replace(/REFERENCES.*ON DELETE NO ACTION/g, '')
+        .replace(/CHECK\([^)]+\)/g, 'VARCHAR(50)'),
+      sqlserver: SCHEMA_SQL.replace(/INTEGER NOT NULL DEFAULT 0/g, 'INT NOT NULL DEFAULT 0')
+        .replace(/datetime\('now'\)/g, 'GETUTCDATE()')
+        .replace(/TEXT PRIMARY KEY NOT NULL/g, 'NVARCHAR(36) PRIMARY KEY')
+        .replace(/TEXT NOT NULL/g, 'NVARCHAR(255) NOT NULL')
+        .replace(/TEXT UNIQUE NOT NULL/g, 'NVARCHAR(255) UNIQUE NOT NULL')
+        .replace(/REFERENCES.*ON DELETE CASCADE/g, '')
+        .replace(/REFERENCES.*ON DELETE SET NULL/g, '')
+        .replace(/REFERENCES.*ON DELETE NO ACTION/g, '')
+        .replace(/CHECK\([^)]+\)/g, 'NVARCHAR(50)'),
+    },
+  });
+});
+
 // GET /api/v1/setup/interviewer/download/:id — Download soft-locked client
 router.get('/interviewer/download/:id', async (req: Request, res: Response) => {
   const id = req.params.id as string;

@@ -225,7 +225,7 @@ CREATE TABLE IF NOT EXISTS model_provider_configs (
 CREATE TABLE IF NOT EXISTS database_configs (
   id TEXT PRIMARY KEY NOT NULL,
   company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  backend TEXT NOT NULL CHECK(backend IN ('sqlite','postgresql','mysql','sqlserver','redis','supabase','firebase','mongodb','custom')),
+  backend TEXT NOT NULL CHECK(backend IN ('sqlite','postgresql','mysql','sqlserver','cockroachdb','planetscale','supabase','redis','firebase','mongodb','custom')),
   connection_string TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

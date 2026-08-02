@@ -441,14 +441,20 @@
     function renderSetupStep2(el) {
       el.innerHTML = `
         <h3>Step 2: Database Setup</h3>
-        <p style="color:#64748b;margin-bottom:16px;">Choose your database. SQLite is the default and works for most self-hosted installations. For production or team use, PostgreSQL or MySQL are recommended.</p>
+        <p style="color:#64748b;margin-bottom:16px;">Choose your database. SQLite works out of the box for most self-hosted setups. For production or multi-user environments, use a dedicated database server.</p>
         <form onsubmit="saveDbConfig(event)" style="margin-bottom:16px;">
           <div class="form-group"><label>Database Type</label>
             <select id="db-type" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;">
-              <option value="sqlite" selected>SQLite (default, file-based)</option>
+              <option value="sqlite" selected>SQLite (Local)</option>
               <option value="postgresql">PostgreSQL</option>
-              <option value="mysql">MySQL</option>
+              <option value="mysql">MySQL / MariaDB</option>
               <option value="sqlserver">SQL Server</option>
+              <option value="cockroachdb">CockroachDB</option>
+              <option value="planetscale">PlanetScale</option>
+              <option value="supabase">Supabase (Hosted Postgres)</option>
+              <option value="firebase">Firebase / Firestore</option>
+              <option value="mongodb">MongoDB</option>
+              <option value="redis">Redis (Cache only)</option>
             </select>
           </div>
           <div id="db-conn-fields" style="display:none;">
@@ -458,6 +464,7 @@
             <div class="form-group"><label>Username</label><input type="text" id="db-user" placeholder="postgres"></div>
             <div class="form-group"><label>Password</label><input type="password" id="db-pass" placeholder="password"></div>
           </div>
+          <div id="db-setup-instructions" style="display:none;margin-bottom:16px;"></div>
           <div id="db-config-error" class="error" style="display:none;"></div>
           <button type="submit" class="btn btn-sm">Save Configuration</button>
         </form>
@@ -465,9 +472,113 @@
           <button class="btn btn-sm" style="background:#64748b;" onclick="setupNav(1)">&larr; Back</button>
           <button class="btn btn-sm" onclick="completeSetupStep(2)">Mark Complete &amp; Next &rarr;</button>
         </div>`;
-      document.getElementById('db-type').addEventListener('change', function() {
-        document.getElementById('db-conn-fields').style.display = this.value === 'sqlite' ? 'none' : 'block';
+      const select = document.getElementById('db-type');
+      const connFields = document.getElementById('db-conn-fields');
+      const instructions = document.getElementById('db-setup-instructions');
+      select.addEventListener('change', async function() {
+        const v = this.value;
+        if (v === 'sqlite') {
+          connFields.style.display = 'none';
+          instructions.style.display = 'none';
+        } else {
+          connFields.style.display = 'block';
+          instructions.style.display = 'block';
+          instructions.innerHTML = '<p style="color:#94a3b8;font-size:13px;">Loading schema...</p>';
+          instructions.innerHTML = await dbSetupInstructions(v);
+          // Set default port
+          const portEl = document.getElementById('db-port');
+          if (v === 'postgresql' || v === 'supabase' || v === 'cockroachdb') portEl.placeholder = '5432';
+          else if (v === 'mysql' || v === 'planetscale') portEl.placeholder = '3306';
+          else if (v === 'sqlserver') portEl.placeholder = '1433';
+          else if (v === 'mongodb') portEl.placeholder = '27017';
+          else if (v === 'redis') portEl.placeholder = '6379';
+        }
       });
+    }
+
+    async function dbSetupInstructions(backend) {
+      let schemaSql = '-- Run this schema against your database after creation';
+      try {
+        const schemaRes = await apiCall('GET', '/setup/schema');
+        if (schemaRes.success && schemaRes.data[backend]) {
+          schemaSql = schemaRes.data[backend];
+        } else if (schemaRes.success && schemaRes.data.sqlite) {
+          schemaSql = schemaRes.data.sqlite;
+        }
+      } catch(e) { /* use placeholder */ }
+
+      const schemas = {
+        postgresql: `<h4 style="margin:0 0 8px;font-size:14px;">PostgreSQL Setup</h4>
+          <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:1.8;">
+            <li>Create the database: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">CREATE DATABASE apar;</code></li>
+            <li>Run the schema below against the <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">apar</code> database</li>
+            <li>Enter your connection details above</li>
+          </ol>
+          <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:13px;color:#3b82f6;">View Schema SQL</summary>
+            <pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:11px;overflow-x:auto;margin-top:8px;max-height:300px;overflow-y:auto;">${schemaSql.replace(/</g,'&lt;')}</pre></details>`,
+        mysql: `<h4 style="margin:0 0 8px;font-size:14px;">MySQL / MariaDB Setup</h4>
+          <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:1.8;">
+            <li>Create the database: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">CREATE DATABASE apar CHARACTER SET utf8mb4;</code></li>
+            <li>Run the schema below against the <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">apar</code> database</li>
+            <li>Enter your connection details above</li>
+          </ol>
+          <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:13px;color:#3b82f6;">View Schema SQL</summary>
+            <pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:11px;overflow-x:auto;margin-top:8px;max-height:300px;overflow-y:auto;">${schemaSql.replace(/</g,'&lt;')}</pre></details>`,
+        sqlserver: `<h4 style="margin:0 0 8px;font-size:14px;">SQL Server Setup</h4>
+          <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:1.8;">
+            <li>Create the database: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">CREATE DATABASE apar;</code></li>
+            <li>Run the schema below against the <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">apar</code> database</li>
+            <li>Ensure your user has <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">db_owner</code> or read/write permissions</li>
+          </ol>
+          <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:13px;color:#3b82f6;">View Schema SQL</summary>
+            <pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:11px;overflow-x:auto;margin-top:8px;max-height:300px;overflow-y:auto;">${schemaSql.replace(/</g,'&lt;')}</pre></details>`,
+        cockroachdb: `<h4 style="margin:0 0 8px;font-size:14px;">CockroachDB Setup</h4>
+          <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:1.8;">
+            <li>Create the database: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">CREATE DATABASE apar;</code></li>
+            <li>Run the schema below — CockroachDB is PostgreSQL-compatible</li>
+            <li>Use the PostgreSQL connection string format above</li>
+          </ol>
+          <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:13px;color:#3b82f6;">View Schema SQL</summary>
+            <pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:11px;overflow-x:auto;margin-top:8px;max-height:300px;overflow-y:auto;">${schemaSql.replace(/</g,'&lt;')}</pre></details>`,
+        planetscale: `<h4 style="margin:0 0 8px;font-size:14px;">PlanetScale Setup</h4>
+          <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:1.8;">
+            <li>Create a new database in your PlanetScale console</li>
+            <li>Run the schema below via the PlanetScale shell or a MySQL client</li>
+            <li>Note: PlanetScale uses MySQL protocol — use the MySQL connection format</li>
+          </ol>
+          <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:13px;color:#3b82f6;">View Schema SQL</summary>
+            <pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:11px;overflow-x:auto;margin-top:8px;max-height:300px;overflow-y:auto;">${schemaSql.replace(/</g,'&lt;')}</pre></details>`,
+        supabase: `<h4 style="margin:0 0 8px;font-size:14px;">Supabase Setup</h4>
+          <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:1.8;">
+            <li>Create a new project in your Supabase dashboard</li>
+            <li>Go to Settings &rarr; Database and find your connection string</li>
+            <li>Run the schema below in the SQL Editor</li>
+            <li>Use the connection string format: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres</code></li>
+          </ol>
+          <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:13px;color:#3b82f6;">View Schema SQL</summary>
+            <pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:11px;overflow-x:auto;margin-top:8px;max-height:300px;overflow-y:auto;">${schemaSql.replace(/</g,'&lt;')}</pre></details>`,
+        firebase: `<h4 style="margin:0 0 8px;font-size:14px;">Firebase / Firestore Setup</h4>
+          <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:1.8;">
+            <li>Create a Firebase project at <a href="https://console.firebase.google.com" target="_blank" style="color:#3b82f6;">console.firebase.google.com</a></li>
+            <li>Generate a service account key (Settings &rarr; Service Accounts)</li>
+            <li>Upload the JSON key or paste the connection details above</li>
+            <li>Note: Firebase uses a different data model — APAR will create collections automatically</li>
+          </ol>`,
+        mongodb: `<h4 style="margin:0 0 8px;font-size:14px;">MongoDB Setup</h4>
+          <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:1.8;">
+            <li>Create a MongoDB cluster (Atlas or self-hosted)</li>
+            <li>Create a database named <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">apar</code></li>
+            <li>Create a database user with read/write access</li>
+            <li>Connection string: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">mongodb+srv://[USER]:[PASS]@[CLUSTER].mongodb.net/apar</code></li>
+          </ol>`,
+        redis: `<h4 style="margin:0 0 8px;font-size:14px;">Redis Setup</h4>
+          <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:1.8;">
+            <li>Redis is used as a cache/session store, not a primary database</li>
+            <li>You still need SQLite or another primary database</li>
+            <li>Connection: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">redis://[HOST]:[PORT]</code></li>
+          </ol>`,
+      };
+      return schemas[backend] || '<p style="color:#64748b;font-size:13px;">Configure your connection details above.</p>';
     }
 
     async function saveDbConfig(e) {
