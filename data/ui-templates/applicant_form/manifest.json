@@ -1,8 +1,0 @@
-{
-  "name": "Applicant Form",
-  "version": "1.0.0",
-  "description": "Clean applicant submission form with drag-and-drop resume upload",
-  "platform": "applicant_form",
-  "author": "APAR",
-  "minVersion": "1.0.0"
-}

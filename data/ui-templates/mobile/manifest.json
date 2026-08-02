@@ -1,8 +1,0 @@
-{
-  "name": "Mobile Interviewer",
-  "version": "1.0.0",
-  "description": "Compact mobile interviewer interface with bottom navigation",
-  "platform": "mobile",
-  "author": "APAR",
-  "minVersion": "1.0.0"
-}

@@ -1,8 +1,0 @@
-{
-  "name": "Web Dashboard",
-  "version": "1.0.0",
-  "description": "Web admin dashboard interface with sidebar navigation",
-  "platform": "web_dash",
-  "author": "APAR",
-  "minVersion": "1.0.0"
-}

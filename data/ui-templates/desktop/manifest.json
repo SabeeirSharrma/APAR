@@ -1,8 +1,0 @@
-{
-  "name": "Desktop Interviewer",
-  "version": "1.0.0",
-  "description": "Default desktop interviewer interface with sidebar navigation and wide layout",
-  "platform": "desktop",
-  "author": "APAR",
-  "minVersion": "1.0.0"
-}
