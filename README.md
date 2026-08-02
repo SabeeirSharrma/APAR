@@ -33,7 +33,7 @@ The server starts on `http://localhost:3000` by default.
 ## Pages
 
 | Page | URL | Purpose |
-|------|-----|---------|
+| ------ | ----- | --------- |
 | Admin Panel | `/admin.html` | Manage positions, interviewers, applicants, features |
 | Interviewer Dashboard | `/interviewer.html` | View assigned applicants, send messages |
 | Apply | `/apply.html` | Public applicant submission form |
@@ -47,7 +47,7 @@ Full API documentation is available at `/docs` (Swagger UI) or `/docs.json` (Ope
 
 ### Key Endpoints
 
-```
+```md
 POST   /api/v1/auth/register       Register a new company
 POST   /api/v1/auth/login          Login (admin or interviewer)
 GET    /api/v1/applicants          List applicants (auth required)
@@ -86,7 +86,7 @@ DATABASE_PATH=./apar.db
 
 ## Architecture
 
-```
+```md
 src/
 ├── index.ts                 # Express server entry point
 ├── db/
@@ -145,7 +145,7 @@ public/
 APAR optionally uses native code for performance:
 
 | Module | Language | Purpose |
-|--------|----------|---------|
+| -------- | ---------- | --------- |
 | `apar-keygen` | Rust | AES-256-GCM key generation, encrypt/decrypt |
 | `CryptoModule` | Java/Transit | Persistent encryption process |
 | `TextAnalysisModule` | Java/Transit | Word/token/pattern analysis |
@@ -175,4 +175,4 @@ npm run test         # Run tests (vitest)
 
 ## License
 
-Private — not for distribution.
+PolyForm Noncommercial License 1.0.0
