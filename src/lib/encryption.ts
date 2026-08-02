@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync, createHash } from 'crypto';
 import { getOne, run } from '../db/index.js';
+import { rustGenerateKey } from './transit.js';
 
 // ============================================================================
 // Encryption Utilities (§6) — Per-Interviewer Key Hierarchy
@@ -88,11 +89,16 @@ function decryptWithMasterKey(encryptedData: string, companyId: string): string 
 
 /**
  * Generate a new random encryption key for an interviewer.
- * This is the raw key used to encrypt/decrypt results.
- * Admins can reset (regenerate) this but never define/choose it.
+ * Uses Rust binary if available, falls back to Node.js crypto.
  */
-export function generateInterviewerKey(): string {
-  return randomBytes(32).toString('hex');
+export async function generateInterviewerKey(): Promise<string> {
+  try {
+    const result = await rustGenerateKey();
+    return result.key;
+  } catch {
+    // Fallback to Node.js crypto
+    return randomBytes(32).toString('hex');
+  }
 }
 
 /**
@@ -129,11 +135,9 @@ export function getInterviewerKey(interviewerId: string, companyId: string): str
 /**
  * Reset an interviewer's encryption key (admin action).
  * Generates a new random key and stores it. The old key is lost.
- * Results encrypted with the old key will be undecryptable unless
- * the old key was backed up separately (not in scope for v1).
  */
-export function resetInterviewerKey(interviewerId: string, companyId: string): string {
-  const newKey = generateInterviewerKey();
+export async function resetInterviewerKey(interviewerId: string, companyId: string): Promise<string> {
+  const newKey = await generateInterviewerKey();
   storeInterviewerKey(interviewerId, companyId, newKey);
   return newKey;
 }

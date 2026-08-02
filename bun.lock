@@ -5,6 +5,7 @@
     "": {
       "name": "apar",
       "dependencies": {
+        "@sabeeirsharrma/transit": "^2.6.0",
         "bcryptjs": "^3.0.3",
         "better-sqlite3": "^11.0.0",
         "cors": "^2.8.5",
@@ -144,6 +145,20 @@
     "@rollup/rollup-win32-x64-gnu": ["@rollup/rollup-win32-x64-gnu@4.62.3", "", { "os": "win32", "cpu": "x64" }, "sha512-vp7N084ew/odXn2gi/mzm9mUkQu9l6AiN6dt4IeUM2Uvm9o+cVmP+YkqbMOteLbiGgqBBlJZjIMYVCfOOIVbVQ=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.62.3", "", { "os": "win32", "cpu": "x64" }, "sha512-MOG/3gTOn4Fwf574RVOaY61I5o6P90legkFADiTyn1hyjNydT+cerU2rLUwPdZkKKyJ+iT+K9p7WXK4LM1Ka6g=="],
+
+    "@sabeeirsharrma/java-runtime": ["@sabeeirsharrma/java-runtime@2.6.0", "", { "dependencies": { "@sabeeirsharrma/java-runtime-sources": "^2.5.0", "@sabeeirsharrma/schema": "^2.5.0" } }, "sha512-4OPRmJIXybsSmQYX+0g6JrACIQ6aHoFGnbrV8nIOadW8zHp95aHfVoC/37vsE8RCwAeyf0EZpvyAJp7b0hAl6g=="],
+
+    "@sabeeirsharrma/java-runtime-sources": ["@sabeeirsharrma/java-runtime-sources@2.5.0", "", {}, "sha512-2V/NcOrs5IDOCQvWaoKRUkNW/haY1ADmTkG8GJ/H75yFyjO4b+vbVFuaILSSG7D6FlHhcwFKuKCTlOqvNKl1pQ=="],
+
+    "@sabeeirsharrma/py-runtime": ["@sabeeirsharrma/py-runtime@2.6.0", "", {}, "sha512-mro0EQT2p2cHcePp9dF5dc5DTNpfmTOpxRq97uUMFu6H9/qt1ZFKUcE9bTN8enSLk5zbnZJGIUoqLxpYp8UAiQ=="],
+
+    "@sabeeirsharrma/python-runtime": ["@sabeeirsharrma/python-runtime@2.6.0", "", { "dependencies": { "@sabeeirsharrma/py-runtime": "^2.6.0" } }, "sha512-WphygOHq/Wcxa3GsgVWA55s/toy6d64N+BcYYx0Wjnx6TkD4JDHqV3Idkjm1YK5h6FtejS7awjMh49C3YXcx1A=="],
+
+    "@sabeeirsharrma/scanner": ["@sabeeirsharrma/scanner@2.5.0", "", {}, "sha512-M/m6PmDVaXw7Uf2Ia5beb0BI8lNe7NKLpJlT2cWBqang1H7inl/OQpqI19zIzcU0kGCQb3sUwI8Okx4Q1q5dLw=="],
+
+    "@sabeeirsharrma/schema": ["@sabeeirsharrma/schema@2.5.0", "", {}, "sha512-Gr87OIhRSpmBb+zExGmrKal5tZUuyfXO9mtkymCLrZ1F+xMgwZ+vz+RCUxAkdRjwL32f+V5cfhB36ApeDvgniA=="],
+
+    "@sabeeirsharrma/transit": ["@sabeeirsharrma/transit@2.6.0", "", { "dependencies": { "@sabeeirsharrma/java-runtime": "^2.6.0", "@sabeeirsharrma/python-runtime": "^2.6.0", "@sabeeirsharrma/scanner": "^2.5.0", "@sabeeirsharrma/schema": "^2.5.0" } }, "sha512-Bdcmv5pxEuQHbJkbDp8rmLrmDbGrhBCXdyz2jycNxbqyyhrKE/1ghQx5tY4bsEmkf3sJIGWgi7L5wkrE95flSA=="],
 
     "@types/bcryptjs": ["@types/bcryptjs@2.4.6", "", {}, "sha512-9xlo6R2qDs5uixm0bcIqCeMCE6HiQsIyel9KQySStiyqNl2tnj2mP3DX1Nf56MD6KMenNNlBBsy3LJ7gUEQPXQ=="],
 

@@ -163,6 +163,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
   const { publicKey, privateKey } = generateKeyPair();
 
   const interviewerId = randomUUID();
+  const interviewerEncryptionKey = await generateInterviewerKey();
 
   transaction(() => {
     // Create interviewer
@@ -172,8 +173,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
       { id: interviewerId, companyId, email, name, password_hash: passwordHash, public_key: publicKey },
     );
 
-    // Generate and store per-interviewer encryption key (§2: key hierarchy)
-    const interviewerEncryptionKey = generateInterviewerKey();
+    // Store per-interviewer encryption key (§2: key hierarchy)
     storeInterviewerKey(interviewerId, companyId, interviewerEncryptionKey);
 
     // Assign to positions
@@ -546,7 +546,7 @@ router.post('/:id/reset-key', async (req: Request, res: Response) => {
   }
 
   // Reset the interviewer's encryption key (§2: admin recovery)
-  const newKey = resetInterviewerKey(id, companyId);
+  const newKey = await resetInterviewerKey(id, companyId);
 
   res.json({
     success: true,

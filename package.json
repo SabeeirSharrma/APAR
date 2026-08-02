@@ -16,6 +16,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@sabeeirsharrma/transit": "^2.6.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.0.0",
     "cors": "^2.8.5",

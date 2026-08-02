@@ -9,12 +9,18 @@ import { initDb } from './db/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { startRetryWorker } from './lib/retryWorker.js';
+import { initTransit } from './lib/transit.js';
 
 // Load environment variables
 dotenv.config();
 
 // Initialize database
 initDb();
+
+// Initialize Transit native modules (non-blocking)
+initTransit().catch(err => {
+  console.warn('[transit] Failed to initialize:', err.message);
+});
 
 // Ensure data directories exist
 const dataDir = path.join(process.cwd(), 'data');

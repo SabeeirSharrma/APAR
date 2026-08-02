@@ -937,4 +937,62 @@ UI changes — only native code changes require re-submission.
   philosophical question (§14, open question 13) needs to be settled first;
   broader custom integrations (ATS hooks, school application system hooks,
   webhooks); Transit-Dart interop, if it ever becomes useful (explicitly not
-  planned for now); affiliate/monetization features (§20).git push -u origin main
+  planned for now); affiliate/monetization features (§20).
+
+## 24. Native Module Architecture
+
+APAR uses native code for performance-critical operations via Transit
+(JS↔Rust/Java interop). The split is deliberate: Rust binaries for one-shot
+ops, Java via Transit for persistent hot-path processes.
+
+### Why This Split
+
+- **Rust toolchain is 2-4GB on Windows** — too heavy for dev machines. Shipping
+  pre-built binaries keeps setup fast. Only used for one-shot operations where
+  spawning a process per call is acceptable.
+- **Java via Transit for hot-path code** — JVM stays resident as a long-lived
+  process. Transit discovers functions via tree-sitter, calls them over a binary
+  protocol. Lower latency than spawning a new process each time.
+- **TypeScript remains primary** — native modules handle crypto and text
+  analysis. Everything else (routing, DB, pipeline orchestration) stays in TS.
+
+### Module Split
+
+| Module | Language | Transport | Operations |
+|--------|----------|-----------|------------|
+| `apar-keygen` | Rust | CLI binary | AES-256-GCM key generation, encrypt/decrypt |
+| `CryptoModule` | Java | Transit bridge | Hot-path encrypt/decrypt (persistent JVM) |
+| `TextAnalysisModule` | Java | Transit bridge | Text analysis, tokenization, pattern matching |
+
+### Integration
+
+```typescript
+// src/lib/transit.ts — unified wrapper
+import { transit } from '@sabeeirsharrma/transit';
+
+// Initialize Java bridge on boot (non-blocking)
+const javaModule = transit.java('./native/apar-java/src/main/java');
+
+// Call functions as async proxies
+const result = await javaModule.generateKey('{}');
+```
+
+### Fallback Chain
+
+All native operations fall back gracefully:
+1. Rust binary (if available)
+2. Java Transit (if JVM running)
+3. Node.js crypto (always available)
+
+### File Locations
+
+```
+native/
+├── apar-keygen/          # Rust binary (branch: rust-keygen)
+│   ├── src/main.rs
+│   └── Cargo.toml
+└── apar-java/            # Java Transit modules (branch: java-transit)
+    └── src/main/java/
+        ├── CryptoModule.java
+        └── TextAnalysisModule.java
+```git push -u origin main

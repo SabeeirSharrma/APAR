@@ -237,6 +237,7 @@ router.post('/interviewer', async (req: Request, res: Response) => {
   const tempPassword = randomUUID().slice(0, 12);
   const passwordHash = hashPassword(tempPassword);
   const { publicKey, privateKey } = generateKeyPair();
+  const interviewerEncryptionKey = await generateInterviewerKey();
 
   transaction(() => {
     run(
@@ -245,8 +246,7 @@ router.post('/interviewer', async (req: Request, res: Response) => {
       { id: interviewerId, companyId, email, name, password_hash: passwordHash, public_key: publicKey },
     );
 
-    // Generate and store per-interviewer encryption key (§2: key hierarchy)
-    const interviewerEncryptionKey = generateInterviewerKey();
+    // Store per-interviewer encryption key (§2: key hierarchy)
     storeInterviewerKey(interviewerId, companyId, interviewerEncryptionKey);
 
     for (const positionId of positionIds) {
