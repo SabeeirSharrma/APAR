@@ -1,0 +1,309 @@
+{
+  "scanner_version": "0.1.0",
+  "files": {
+    "./src/routes/upload.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/routes/customUi.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/routes/messages.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/middleware/featureToggle.ts": {
+      "mtime": 1785581161,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "./src/middleware/featureToggle.ts",
+          "function_name": "requireFeature",
+          "signature": "requireFeature",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/middleware/featureToggle.ts",
+          "function_name": "isFeatureEnabled",
+          "signature": "isFeatureEnabled",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/middleware/featureToggle.ts",
+          "function_name": "getFeatureToggles",
+          "signature": "getFeatureToggles",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./src/routes/status.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/lib/models.ts": {
+      "mtime": 1785581161,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/models.ts",
+          "function_name": "createModelClient",
+          "signature": "createModelClient",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/models.ts",
+          "function_name": "buildMainPrompt",
+          "signature": "buildMainPrompt",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/models.ts",
+          "function_name": "buildVerificationPrompt",
+          "signature": "buildVerificationPrompt",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/models.ts",
+          "function_name": "callMainModel",
+          "signature": "callMainModel",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/models.ts",
+          "function_name": "callVerificationModel",
+          "signature": "callVerificationModel",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/models.ts",
+          "function_name": "scoreToGrade",
+          "signature": "scoreToGrade",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./src/lib/pipeline.ts": {
+      "mtime": 1785581161,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/pipeline.ts",
+          "function_name": "getPipelineStatus",
+          "signature": "getPipelineStatus",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./src/types.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/routes/rounds.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/lib/encryption.ts": {
+      "mtime": 1785649819,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/encryption.ts",
+          "function_name": "storeInterviewerKey",
+          "signature": "storeInterviewerKey",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/encryption.ts",
+          "function_name": "generateKeyPair",
+          "signature": "generateKeyPair",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/encryption.ts",
+          "function_name": "encryptApiKey",
+          "signature": "encryptApiKey",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./src/routes/applicants.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/lib/validation.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/middleware/rateLimit.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/routes/setup.ts": {
+      "mtime": 1785649863,
+      "entries": []
+    },
+    "./src/middleware/auth.ts": {
+      "mtime": 1785581161,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "./src/middleware/auth.ts",
+          "function_name": "requireAuth",
+          "signature": "requireAuth",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/middleware/auth.ts",
+          "function_name": "requireRole",
+          "signature": "requireRole",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/middleware/auth.ts",
+          "function_name": "optionalAuth",
+          "signature": "optionalAuth",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./src/lib/retryWorker.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/db/schema.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/routes/tags.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/db/index.ts": {
+      "mtime": 1785581161,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "./src/db/index.ts",
+          "function_name": "closeDb",
+          "signature": "closeDb",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/db/index.ts",
+          "function_name": "run",
+          "signature": "run",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./src/routes/features.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/routes/auth.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/routes/positions.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/lib/email.ts": {
+      "mtime": 1785581161,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/email.ts",
+          "function_name": "buildApprovalEmail",
+          "signature": "buildApprovalEmail",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/email.ts",
+          "function_name": "buildRejectionEmail",
+          "signature": "buildRejectionEmail",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/email.ts",
+          "function_name": "sendApprovalEmail",
+          "signature": "sendApprovalEmail",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./src/lib/auth.ts": {
+      "mtime": 1785581161,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/auth.ts",
+          "function_name": "generateToken",
+          "signature": "generateToken",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./src/lib/transit.ts": {
+      "mtime": 1785650008,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/transit.ts",
+          "function_name": "initTransit",
+          "signature": "initTransit",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/transit.ts",
+          "function_name": "getJavaModule",
+          "signature": "getJavaModule",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "./src/lib/transit.ts",
+          "function_name": "isTransitReady",
+          "signature": "isTransitReady",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./src/middleware/error.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/routes/index.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    },
+    "./src/index.ts": {
+      "mtime": 1785649829,
+      "entries": []
+    },
+    "./src/routes/interviewers.ts": {
+      "mtime": 1785650026,
+      "entries": []
+    },
+    "./src/routes/notes.ts": {
+      "mtime": 1785581161,
+      "entries": []
+    }
+  }
+}

@@ -23,7 +23,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUST_BINARY_PATH = resolve(__dirname, '../native/apar-keygen/target/release/apar-keygen');
 const JAVA_SOURCE_PATH = resolve(__dirname, '../native/apar-java/src/main/java');
 
-let javaModule: any = null;
+// Transit bridge — transit.java() scans Java source via tree-sitter to discover
+// public methods in CryptoModule.java and TextAnalysisModule.java
+const jv = transit.java(JAVA_SOURCE_PATH);
+
 let transitReady = false;
 
 /**
@@ -31,23 +34,8 @@ let transitReady = false;
  */
 export async function initTransit(): Promise<void> {
   if (transitReady) return;
-
-  try {
-    // Initialize Java Transit bridge
-    javaModule = transit.java(JAVA_SOURCE_PATH);
-    transitReady = true;
-    console.log('[transit] Java modules loaded');
-  } catch (err) {
-    console.warn('[transit] Java modules not available:', err);
-    // Continue without Java — will use Node.js fallbacks
-  }
-}
-
-/**
- * Get Java Transit module (if available).
- */
-export function getJavaModule(): any {
-  return javaModule;
+  transitReady = true;
+  console.log('[transit] Java modules available via Transit bridge');
 }
 
 /**
@@ -131,28 +119,28 @@ export async function rustDecrypt(key: string, nonce: string, ciphertext: string
 
 /**
  * Generate a new AES-256-GCM key using Java.
+ * Bridge: jv.generateKey() -> CryptoModule.generateKey()
  */
 export async function javaGenerateKey(): Promise<KeyGenResult> {
-  if (!javaModule) throw new Error('Java module not initialized');
-  const result = await javaModule.generateKey('{}');
+  const result = await jv.generateKey('{}');
   return JSON.parse(result as string);
 }
 
 /**
  * Encrypt data using Java.
+ * Bridge: jv.encrypt() -> CryptoModule.encrypt()
  */
 export async function javaEncrypt(key: string, plaintext: string): Promise<EncryptResult> {
-  if (!javaModule) throw new Error('Java module not initialized');
-  const result = await javaModule.encrypt(JSON.stringify({ key, plaintext }));
+  const result = await jv.encrypt(JSON.stringify({ key, plaintext }));
   return JSON.parse(result as string);
 }
 
 /**
  * Decrypt data using Java.
+ * Bridge: jv.decrypt() -> CryptoModule.decrypt()
  */
 export async function javaDecrypt(key: string, nonce: string, ciphertext: string): Promise<string> {
-  if (!javaModule) throw new Error('Java module not initialized');
-  const result = await javaModule.decrypt(JSON.stringify({ key, nonce, ciphertext }));
+  const result = await jv.decrypt(JSON.stringify({ key, nonce, ciphertext }));
   const parsed = JSON.parse(result as string);
   if (parsed.error) throw new Error(parsed.error);
   return parsed.plaintext;
@@ -160,28 +148,28 @@ export async function javaDecrypt(key: string, nonce: string, ciphertext: string
 
 /**
  * Analyze text using Java.
+ * Bridge: jv.analyzeText() -> TextAnalysisModule.analyzeText()
  */
 export async function javaAnalyzeText(text: string): Promise<any> {
-  if (!javaModule) throw new Error('Java module not initialized');
-  const result = await javaModule.analyzeText(JSON.stringify({ text }));
+  const result = await jv.analyzeText(JSON.stringify({ text }));
   return JSON.parse(result as string);
 }
 
 /**
  * Tokenize text using Java.
+ * Bridge: jv.tokenize() -> TextAnalysisModule.tokenize()
  */
 export async function javaTokenize(text: string): Promise<any> {
-  if (!javaModule) throw new Error('Java module not initialized');
-  const result = await javaModule.tokenize(JSON.stringify({ text }));
+  const result = await jv.tokenize(JSON.stringify({ text }));
   return JSON.parse(result as string);
 }
 
 /**
  * Find patterns in text using Java.
+ * Bridge: jv.findPatterns() -> TextAnalysisModule.findPatterns()
  */
 export async function javaFindPatterns(text: string, pattern: string): Promise<any> {
-  if (!javaModule) throw new Error('Java module not initialized');
-  const result = await javaModule.findPatterns(JSON.stringify({ text, pattern }));
+  const result = await jv.findPatterns(JSON.stringify({ text, pattern }));
   return JSON.parse(result as string);
 }
 

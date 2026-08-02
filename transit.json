@@ -1,0 +1,13 @@
+{
+  "build": {
+    "java": {
+      "command": "javac",
+      "features": ["java-native"]
+    }
+  },
+  "links": {
+    "java": {
+      "transport": "jni"
+    }
+  }
+}
