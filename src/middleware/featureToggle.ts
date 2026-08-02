@@ -23,7 +23,7 @@ export function requireFeature(feature: FeatureType) {
 
     // Check if feature is enabled (default: disabled for opt-in features)
     const toggle = getOne<{ is_enabled: number }>(
-      'SELECT is_enabled FROM feature_toggles WHERE company_id = ? AND feature = ?',
+      'SELECT is_enabled FROM feature_toggles WHERE company_id = @companyId AND feature = @feature',
       { companyId, feature },
     );
 
@@ -48,7 +48,7 @@ export function requireFeature(feature: FeatureType) {
  */
 export function isFeatureEnabled(companyId: string, feature: FeatureType): boolean {
   const toggle = getOne<{ is_enabled: number }>(
-    'SELECT is_enabled FROM feature_toggles WHERE company_id = ? AND feature = ?',
+    'SELECT is_enabled FROM feature_toggles WHERE company_id = @companyId AND feature = @feature',
     { companyId, feature },
   );
   return toggle?.is_enabled === 1;
@@ -59,7 +59,7 @@ export function isFeatureEnabled(companyId: string, feature: FeatureType): boole
  */
 export function getFeatureToggles(companyId: string): Array<{ feature: FeatureType; isEnabled: boolean }> {
   const toggles = getMany<{ feature: string; is_enabled: number }>(
-    'SELECT feature, is_enabled FROM feature_toggles WHERE company_id = ?',
+    'SELECT feature, is_enabled FROM feature_toggles WHERE company_id = @companyId',
     { companyId },
   );
 

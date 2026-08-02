@@ -1,6 +1,5 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { SCHEMA_SQL } from './schema.js';
 
 // ============================================================================
@@ -9,8 +8,7 @@ import { SCHEMA_SQL } from './schema.js';
 // DB is lazy — only created on first actual query. Server starts clean
 // without any DB file. Health, docs, and info endpoints work without DB.
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../../apar.db');
+const DEFAULT_DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), 'apar.db');
 
 let db: Database.Database | null = null;
 

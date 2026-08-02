@@ -235,7 +235,7 @@ router.post('/interviewer', async (req: Request, res: Response) => {
 
   const interviewerId = randomUUID();
   const tempPassword = randomUUID().slice(0, 12);
-  const passwordHash = hashPassword(tempPassword);
+  const passwordHash = await hashPassword(tempPassword);
   const { publicKey, privateKey } = generateKeyPair();
   const interviewerEncryptionKey = await generateInterviewerKey();
 

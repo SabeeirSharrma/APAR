@@ -157,7 +157,7 @@ router.post('/', requireRole('company_admin'), async (req: Request, res: Respons
 
   // Generate password for the interviewer (they'll use email + password to login)
   const tempPassword = randomUUID().slice(0, 12);
-  const passwordHash = hashPassword(tempPassword);
+  const passwordHash = await hashPassword(tempPassword);
 
   // Generate encryption keypair (§6)
   const { publicKey, privateKey } = generateKeyPair();

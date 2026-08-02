@@ -78,11 +78,11 @@ function assignInterviewer(applicationId: string, positionId: string): string | 
     `SELECT i.id
      FROM interviewers i
      JOIN interviewer_positions ip ON i.id = ip.interviewer_id
-     WHERE ip.position_id = ?
+     WHERE ip.position_id = @positionId
      ORDER BY (
        SELECT COUNT(*) FROM applications a
        WHERE a.assigned_interviewer_id = i.id
-         AND a.position_id = ?
+         AND a.position_id = @positionId
          AND a.status NOT IN ('approved', 'rejected')
      ) ASC`,
     { positionId },
@@ -95,7 +95,7 @@ function assignInterviewer(applicationId: string, positionId: string): string | 
   const assignedId = interviewers[0].id;
 
   run(
-    `UPDATE applications SET assigned_interviewer_id = ?, updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE applications SET assigned_interviewer_id = @interviewerId, updated_at = datetime('now') WHERE id = @applicationId`,
     { interviewerId: assignedId, applicationId },
   );
 
@@ -214,7 +214,7 @@ function storeResult(
 
   run(
     `INSERT INTO results (id, application_id, encrypted_data, low_confidence, verification_attempts)
-     VALUES (?, ?, ?, ?, ?)`,
+     VALUES (@resultId, @applicationId, @encryptedData, @lowConfidence, @verificationAttempts)`,
     {
       resultId,
       applicationId,
@@ -241,7 +241,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
   try {
     // Look up position and company
     const position = getOne<PositionRow>(
-      'SELECT id, company_id, name, criteria FROM positions WHERE id = ?',
+      'SELECT id, company_id, name, criteria FROM positions WHERE id = @positionId',
       { positionId: ctx.positionId },
     );
     if (!position) {
@@ -249,7 +249,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     }
 
     const company = getOne<CompanyRow>(
-      'SELECT id, name, submission_email FROM companies WHERE id = ?',
+      'SELECT id, name, submission_email FROM companies WHERE id = @companyId',
       { companyId: position.company_id },
     );
     if (!company) {
@@ -258,7 +258,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
 
     // Update status to processing
     run(
-      `UPDATE applications SET status = 'processing', updated_at = datetime('now') WHERE id = ?`,
+      `UPDATE applications SET status = 'processing', updated_at = datetime('now') WHERE id = @applicationId`,
       { applicationId: ctx.applicationId },
     );
 
@@ -267,7 +267,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     if (!assignedInterviewerId) {
       // Empty pool — hold in queue and notify admin (#23)
       run(
-        `UPDATE applications SET status = 'queued', updated_at = datetime('now') WHERE id = ?`,
+        `UPDATE applications SET status = 'queued', updated_at = datetime('now') WHERE id = @applicationId`,
         { applicationId: ctx.applicationId },
       );
 
@@ -289,13 +289,13 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
 
     // Store base64 on the application record
     run(
-      `UPDATE applications SET resume_base64 = ?, updated_at = datetime('now') WHERE id = ?`,
+      `UPDATE applications SET resume_base64 = @resumeBase64, updated_at = datetime('now') WHERE id = @applicationId`,
       { resumeBase64, applicationId: ctx.applicationId },
     );
 
     // Look up model configs and decrypt API keys (#8)
     const mainConfigRaw = getOne<ModelConfigRow>(
-      'SELECT * FROM model_provider_configs WHERE company_id = ? AND role = ?',
+      'SELECT * FROM model_provider_configs WHERE company_id = @companyId AND role = @role',
       { companyId: position.company_id, role: 'main' },
     );
     if (!mainConfigRaw) {
@@ -307,7 +307,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
     };
 
     const verificationConfigRaw = getOne<ModelConfigRow>(
-      'SELECT * FROM model_provider_configs WHERE company_id = ? AND role = ?',
+      'SELECT * FROM model_provider_configs WHERE company_id = @companyId AND role = @role',
       { companyId: position.company_id, role: 'verification' },
     );
     if (!verificationConfigRaw) {
@@ -323,7 +323,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
 
     // Update status to verifying
     run(
-      `UPDATE applications SET status = 'verifying', updated_at = datetime('now') WHERE id = ?`,
+      `UPDATE applications SET status = 'verifying', updated_at = datetime('now') WHERE id = @applicationId`,
       { applicationId: ctx.applicationId },
     );
 
@@ -341,7 +341,7 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
 
     // Step 9: Mark as delivered (§4 step 9)
     run(
-      `UPDATE applications SET status = 'delivered', updated_at = datetime('now') WHERE id = ?`,
+      `UPDATE applications SET status = 'delivered', updated_at = datetime('now') WHERE id = @applicationId`,
       { applicationId: ctx.applicationId },
     );
 
@@ -386,7 +386,7 @@ export function getPipelineStatus(applicationId: string): {
     assigned_interviewer_id: string | null;
   }
   const app = getOne<ApplicationStatusRow>(
-    'SELECT id, status, assigned_interviewer_id FROM applications WHERE id = ?',
+    'SELECT id, status, assigned_interviewer_id FROM applications WHERE id = @applicationId',
     { applicationId },
   );
 
@@ -394,7 +394,7 @@ export function getPipelineStatus(applicationId: string): {
 
   interface ResultRow { id: string; }
   const result = getOne<ResultRow>(
-    'SELECT id FROM results WHERE application_id = ?',
+    'SELECT id FROM results WHERE application_id = @applicationId',
     { applicationId },
   );
 

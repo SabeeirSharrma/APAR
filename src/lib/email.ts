@@ -178,19 +178,19 @@ export async function sendApprovalEmail(
     company_id: string;
     position_id: string;
   }>(
-    'SELECT email, name, company_id, position_id FROM applications WHERE id = ?',
+    'SELECT email, name, company_id, position_id FROM applications WHERE id = @applicationId',
     { applicationId },
   );
   if (!app) return false;
 
   const company = getOne<{ name: string; submission_email: string }>(
-    'SELECT name, submission_email FROM companies WHERE id = ?',
+    'SELECT name, submission_email FROM companies WHERE id = @id',
     { id: app.company_id },
   );
   if (!company) return false;
 
   const position = getOne<{ name: string }>(
-    'SELECT name FROM positions WHERE id = ?',
+    'SELECT name FROM positions WHERE id = @id',
     { id: app.position_id },
   );
   if (!position) return false;
@@ -223,19 +223,19 @@ export async function sendRejectionEmail(applicationId: string): Promise<boolean
     company_id: string;
     position_id: string;
   }>(
-    'SELECT email, name, company_id, position_id FROM applications WHERE id = ?',
+    'SELECT email, name, company_id, position_id FROM applications WHERE id = @applicationId',
     { applicationId },
   );
   if (!app) return false;
 
   const company = getOne<{ name: string; submission_email: string }>(
-    'SELECT name, submission_email FROM companies WHERE id = ?',
+    'SELECT name, submission_email FROM companies WHERE id = @id',
     { id: app.company_id },
   );
   if (!company) return false;
 
   const position = getOne<{ name: string }>(
-    'SELECT name FROM positions WHERE id = ?',
+    'SELECT name FROM positions WHERE id = @id',
     { id: app.position_id },
   );
   if (!position) return false;
@@ -268,19 +268,19 @@ export async function sendMessagNotificationEmail(
     company_id: string;
     position_id: string;
   }>(
-    'SELECT email, name, company_id, position_id FROM applications WHERE id = ?',
+    'SELECT email, name, company_id, position_id FROM applications WHERE id = @applicationId',
     { applicationId },
   );
   if (!app) return false;
 
   const company = getOne<{ name: string; submission_email: string }>(
-    'SELECT name, submission_email FROM companies WHERE id = ?',
+    'SELECT name, submission_email FROM companies WHERE id = @id',
     { id: app.company_id },
   );
   if (!company) return false;
 
   const position = getOne<{ name: string }>(
-    'SELECT name FROM positions WHERE id = ?',
+    'SELECT name FROM positions WHERE id = @id',
     { id: app.position_id },
   );
   if (!position) return false;
@@ -347,13 +347,13 @@ export async function sendUploadConfirmation(
   applicantName: string,
 ): Promise<boolean> {
   const company = getOne<{ name: string; submission_email: string }>(
-    'SELECT name, submission_email FROM companies WHERE id = ?',
+    'SELECT name, submission_email FROM companies WHERE id = @id',
     { id: companyId },
   );
   if (!company) return false;
 
   const position = getOne<{ name: string }>(
-    'SELECT name FROM positions WHERE id = ?',
+    'SELECT name FROM positions WHERE id = @id',
     { id: positionId },
   );
   if (!position) return false;
@@ -420,20 +420,20 @@ export async function sendEmptyPoolNotification(
   applicantName: string,
 ): Promise<boolean> {
   const company = getOne<{ name: string; submission_email: string }>(
-    'SELECT name, submission_email FROM companies WHERE id = ?',
+    'SELECT name, submission_email FROM companies WHERE id = @id',
     { id: companyId },
   );
   if (!company) return false;
 
   const position = getOne<{ name: string }>(
-    'SELECT name FROM positions WHERE id = ?',
+    'SELECT name FROM positions WHERE id = @id',
     { id: positionId },
   );
   if (!position) return false;
 
   // Get all admin emails for this company
   const admins = getMany<{ email: string }>(
-    'SELECT email FROM company_admins WHERE company_id = ?',
+    'SELECT email FROM company_admins WHERE company_id = @companyId',
     { companyId },
   );
 
@@ -474,19 +474,19 @@ export async function sendRoundAdvancementEmail(
     company_id: string;
     position_id: string;
   }>(
-    'SELECT email, name, company_id, position_id FROM applications WHERE id = ?',
+    'SELECT email, name, company_id, position_id FROM applications WHERE id = @applicationId',
     { applicationId },
   );
   if (!app) return false;
 
   const company = getOne<{ name: string; submission_email: string }>(
-    'SELECT name, submission_email FROM companies WHERE id = ?',
+    'SELECT name, submission_email FROM companies WHERE id = @id',
     { id: app.company_id },
   );
   if (!company) return false;
 
   const position = getOne<{ name: string }>(
-    'SELECT name FROM positions WHERE id = ?',
+    'SELECT name FROM positions WHERE id = @id',
     { id: app.position_id },
   );
   if (!position) return false;

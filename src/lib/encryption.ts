@@ -108,7 +108,7 @@ export async function generateInterviewerKey(): Promise<string> {
 export function storeInterviewerKey(interviewerId: string, companyId: string, rawKey: string): void {
   const encryptedKey = encryptWithMasterKey(rawKey, companyId);
   run(
-    `UPDATE interviewers SET encryption_key = ?, updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE interviewers SET encryption_key = @encryption_key, updated_at = datetime('now') WHERE id = @id`,
     { encryption_key: encryptedKey, id: interviewerId },
   );
 }
@@ -120,7 +120,7 @@ export function storeInterviewerKey(interviewerId: string, companyId: string, ra
  */
 export function getInterviewerKey(interviewerId: string, companyId: string): string | null {
   const row = getOne<{ encryption_key: string }>(
-    'SELECT encryption_key FROM interviewers WHERE id = ? AND company_id = ?',
+    'SELECT encryption_key FROM interviewers WHERE id = @id AND company_id = @companyId',
     { id: interviewerId, companyId },
   );
   if (!row || !row.encryption_key) return null;

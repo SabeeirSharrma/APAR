@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { getOne, run } from '../db/index.js';
+import { getOne, run, transaction } from '../db/index.js';
 import { hashPassword, verifyPassword, generateToken, type TokenPayload } from '../lib/auth.js';
 import { registerSchema, loginSchema } from '../lib/validation.js';
 import { authLimiter } from '../middleware/rateLimit.js';
@@ -38,23 +38,20 @@ router.post('/register', authLimiter, async (req: Request, res: Response) => {
   const adminId = randomUUID();
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+  // Hash password BEFORE the transaction (async, can't be inside sync callback)
+  const passwordHash = await hashPassword(password);
+
   // Create company + admin + setup state in a transaction
-  const { transaction } = await import('../db/index.js');
   transaction(() => {
     run(
       `INSERT INTO companies (id, name, slug, submission_email) VALUES (@id, @name, @slug, @submissionEmail)`,
       { id: companyId, name, slug, submissionEmail },
     );
 
-    const passwordHash = hashPassword(password) as unknown as string;
-    // Hash is async but we need it sync for transaction — use bcryptjs sync
-    import('bcryptjs').then(bcrypt => {
-      const hash = bcrypt.hashSync(password, 12);
-      run(
-        `INSERT INTO company_admins (id, company_id, email, name, password_hash) VALUES (@id, @companyId, @email, @name, @password_hash)`,
-        { id: adminId, companyId, email: adminEmail, name: adminName, password_hash: hash },
-      );
-    });
+    run(
+      `INSERT INTO company_admins (id, company_id, email, name, password_hash) VALUES (@id, @companyId, @email, @name, @password_hash)`,
+      { id: adminId, companyId, email: adminEmail, name: adminName, password_hash: passwordHash },
+    );
 
     run(
       `INSERT INTO setup_state (id, company_id) VALUES (@id, @companyId)`,
