@@ -237,7 +237,18 @@
       <!-- Settings -->
       <div id="section-settings" class="section" style="display:none;">
         <div class="header"><h1>Settings</h1></div>
-        <div class="card"><h3>Setup Status</h3><div id="setup-status"></div></div>
+        <div class="card"><h3>Setup Status</h3><div id="setup-status"></div>
+          <button class="btn btn-sm" style="margin-top:12px;" onclick="rerunWizard()">Rerun Setup Wizard</button>
+        </div>
+      </div>
+
+      <!-- Setup Wizard -->
+      <div id="section-setup" class="section" style="display:none;">
+        <div class="header"><h1>Setup Wizard</h1></div>
+        <div class="card" style="max-width:640px;">
+          <div id="setup-steps-bar" style="display:flex;gap:8px;margin-bottom:24px;"></div>
+          <div id="setup-step-content"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -356,7 +367,188 @@
       document.getElementById('login-view').style.display = 'none';
       document.getElementById('register-view').style.display = 'none';
       document.getElementById('app').classList.add('active');
-      loadDashboard();
+      // Check setup status — redirect to wizard if incomplete
+      const status = await apiCall('GET', '/setup/status');
+      if (status.success && !status.data.isComplete) {
+        showSetupWizard(status.data);
+      } else {
+        loadDashboard();
+      }
+    }
+
+    // --- Setup Wizard ---
+    let setupData = null;
+    let currentSetupStep = 1;
+
+    function showSetupWizard(data) {
+      setupData = data;
+      currentSetupStep = data.steps.find(s => !s.isCompleted)?.step || 5;
+      document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+      document.getElementById('section-setup').style.display = 'block';
+      renderSetupStepsBar();
+      renderSetupStep(currentSetupStep);
+    }
+
+    function renderSetupStepsBar() {
+      const bar = document.getElementById('setup-steps-bar');
+      bar.innerHTML = setupData.steps.map(s => {
+        const active = s.step === currentSetupStep;
+        const done = s.isCompleted;
+        const color = done ? '#16a34a' : active ? '#3b82f6' : '#94a3b8';
+        return `<div style="flex:1;text-align:center;padding:8px 4px;border-radius:6px;background:${color}15;border:2px solid ${color};font-size:12px;font-weight:${active?600:400};color:${color};">
+          <div style="font-size:18px;margin-bottom:2px;">${done ? '&#10003;' : s.step}</div>
+          ${s.name}
+        </div>`;
+      }).join('');
+    }
+
+    function renderSetupStep(step) {
+      currentSetupStep = step;
+      renderSetupStepsBar();
+      const el = document.getElementById('setup-step-content');
+      const templates = {
+        1: renderSetupStep1,
+        2: renderSetupStep2,
+        3: renderSetupStep3,
+        4: renderSetupStep4,
+        5: renderSetupStep5,
+      };
+      (templates[step] || (() => { el.innerHTML = '<p>Setup complete!</p>'; }))(el);
+    }
+
+    function setupNav(step) {
+      if (step <= 5) renderSetupStep(step);
+      else finishSetup();
+    }
+
+    function finishSetup() {
+      showSection('dashboard');
+    }
+
+    function renderSetupStep1(el) {
+      el.innerHTML = `
+        <h3>Step 1: Company Registration</h3>
+        <p style="color:#64748b;margin-bottom:16px;">Already completed during registration.</p>
+        <button class="btn" onclick="setupNav(2)">Next &rarr;</button>`;
+    }
+
+    function renderSetupStep2(el) {
+      el.innerHTML = `
+        <h3>Step 2: Database Setup</h3>
+        <p style="color:#64748b;margin-bottom:16px;">SQLite is the default and already configured. No action needed for most installations.</p>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" style="background:#64748b;" onclick="setupNav(1)">&larr; Back</button>
+          <button class="btn btn-sm" onclick="completeSetupStep(2)">Mark Complete &amp; Next &rarr;</button>
+        </div>`;
+    }
+
+    function renderSetupStep3(el) {
+      el.innerHTML = `
+        <h3>Step 3: Branding</h3>
+        <p style="color:#64748b;margin-bottom:16px;">Customize your company name and submission email. You can change these later in Settings.</p>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" style="background:#64748b;" onclick="setupNav(2)">&larr; Back</button>
+          <button class="btn btn-sm" onclick="completeSetupStep(3)">Mark Complete &amp; Next &rarr;</button>
+        </div>`;
+    }
+
+    async function renderSetupStep4(el) {
+      const configs = await apiCall('GET', '/setup/model-configs');
+      const hasMain = configs.success && configs.data?.main;
+      el.innerHTML = `
+        <h3>Step 4: Model Provider</h3>
+        <p style="color:#64748b;margin-bottom:16px;">Configure the AI model that reviews resumes. You need an API key from OpenRouter, OpenAI, or a local Ollama instance.</p>
+        ${hasMain ? '<p style="color:#16a34a;margin-bottom:16px;">&#10003; Model provider already configured.</p>' : `
+        <form onsubmit="saveModelConfig(event)" style="margin-bottom:16px;">
+          <div class="form-group"><label>Provider</label>
+            <select id="model-provider" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;">
+              <option value="openrouter">OpenRouter</option>
+              <option value="openai">OpenAI</option>
+              <option value="ollama">Ollama (local)</option>
+            </select>
+          </div>
+          <div class="form-group"><label>API Key</label><input type="password" id="model-apikey" placeholder="sk-..."></div>
+          <div class="form-group"><label>Model</label><input type="text" id="model-name" placeholder="e.g. gpt-4o, anthropic/claude-3.5-sonnet" value="gpt-4o"></div>
+          <div id="model-config-error" class="error" style="display:none;"></div>
+          <button type="submit" class="btn btn-sm">Save Config</button>
+        </form>`}
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" style="background:#64748b;" onclick="setupNav(3)">&larr; Back</button>
+          <button class="btn btn-sm" onclick="completeSetupStep(4)">Mark Complete &amp; Next &rarr;</button>
+        </div>`;
+    }
+
+    async function saveModelConfig(e) {
+      e.preventDefault();
+      const data = await apiCall('POST', '/setup/model-provider', {
+        provider: document.getElementById('model-provider').value,
+        apiKey: document.getElementById('model-apikey').value,
+        modelName: document.getElementById('model-name').value,
+        role: 'main',
+      });
+      if (data.success) {
+        renderSetupStep(4);
+      } else {
+        document.getElementById('model-config-error').textContent = data.error;
+        document.getElementById('model-config-error').style.display = 'block';
+      }
+    }
+
+    async function renderSetupStep5(el) {
+      const intData = await apiCall('GET', '/interviewers');
+      const count = intData.success ? intData.data.length : 0;
+      el.innerHTML = `
+        <h3>Step 5: Interviewer Provisioning</h3>
+        <p style="color:#64748b;margin-bottom:16px;">Add interviewers who will review applicants. Each gets a unique encryption key and login credentials.</p>
+        ${count > 0 ? `<p style="color:#16a34a;margin-bottom:16px;">&#10003; ${count} interviewer(s) added.</p>` : ''}
+        <form onsubmit="setupAddInterviewer(event)" style="margin-bottom:16px;">
+          <div class="form-group"><label>Email</label><input type="email" id="setup-int-email" required></div>
+          <div class="form-group"><label>Name</label><input type="text" id="setup-int-name" required></div>
+          <div class="form-group"><label>Position IDs (comma-separated)</label><input type="text" id="setup-int-positions" placeholder="uuid1,uuid2"></div>
+          <button type="submit" class="btn btn-sm">Add Interviewer</button>
+        </form>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" style="background:#64748b;" onclick="setupNav(4)">&larr; Back</button>
+          <button class="btn btn-sm" onclick="skipInterviewers()">Skip for now</button>
+          <button class="btn btn-sm" onclick="completeSetupStep(5)">Done &amp; Finish &rarr;</button>
+        </div>`;
+    }
+
+    async function setupAddInterviewer(e) {
+      e.preventDefault();
+      const posIds = document.getElementById('setup-int-positions').value.split(',').map(s => s.trim()).filter(Boolean);
+      const data = await apiCall('POST', '/interviewers', {
+        email: document.getElementById('setup-int-email').value,
+        name: document.getElementById('setup-int-name').value,
+        positionIds: posIds,
+      });
+      if (data.success) {
+        document.getElementById('setup-int-email').value = '';
+        document.getElementById('setup-int-name').value = '';
+        document.getElementById('setup-int-positions').value = '';
+        renderSetupStep(5);
+      } else {
+        alert(data.error || 'Failed to add interviewer');
+      }
+    }
+
+    async function skipInterviewers() {
+      await apiCall('POST', '/setup/skip-interviewers');
+      finishSetup();
+    }
+
+    async function completeSetupStep(step) {
+      await apiCall('POST', `/setup/step/${step}`, {});
+      const status = await apiCall('GET', '/setup/status');
+      if (status.success) {
+        setupData = status.data;
+        if (status.data.isComplete) {
+          finishSetup();
+        } else {
+          const next = status.data.steps.find(s => !s.isCompleted)?.step;
+          if (next) renderSetupStep(next); else finishSetup();
+        }
+      }
     }
 
     // --- Navigation ---
@@ -582,6 +774,11 @@
       if (!confirm('Skip interviewer provisioning? You can add interviewers later from the Interviewers tab.')) return;
       const data = await apiCall('POST', '/setup/skip-interviewers');
       if (data.success) { loadSettings(); showNotice('Interviewer provisioning skipped', 'success'); }
+    }
+
+    async function rerunWizard() {
+      const status = await apiCall('GET', '/setup/status');
+      if (status.success) showSetupWizard(status.data);
     }
   </script>
 </body>

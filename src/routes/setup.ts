@@ -37,29 +37,23 @@ router.get('/status', async (req: Request, res: Response) => {
     return;
   }
 
-  // Check actual state to determine completion
-  const hasDb = getOne<{ id: string }>('SELECT id FROM database_configs WHERE company_id = @companyId', { companyId });
-  const hasModel = getOne<{ id: string }>('SELECT id FROM model_provider_configs WHERE company_id = @companyId', { companyId });
-  const interviewerCount = getOne<{ count: number }>(
-    'SELECT COUNT(*) as count FROM interviewers WHERE company_id = @companyId',
-    { companyId },
-  );
-
   const steps = [
     { step: 1, name: 'Company Registration', isCompleted: true }, // Always completed if setup_state exists
-    { step: 2, name: 'Database Setup', isCompleted: !!hasDb },
-    { step: 3, name: 'Branding', isCompleted: true }, // Branding is set during registration
-    { step: 4, name: 'Model Provider', isCompleted: !!hasModel },
-    { step: 5, name: 'Interviewer Provisioning', isCompleted: (interviewerCount?.count ?? 0) > 0 },
+    { step: 2, name: 'Database Setup', isCompleted: !!setup.step_database },
+    { step: 3, name: 'Branding', isCompleted: !!setup.step_branding },
+    { step: 4, name: 'Model Provider', isCompleted: !!setup.step_model_provider },
+    { step: 5, name: 'Interviewer Provisioning', isCompleted: !!setup.step_interviewers },
   ];
 
   const isComplete = steps.every((s) => s.isCompleted);
 
-  // Update completion status
-  run(
-    `UPDATE setup_state SET is_complete = @isComplete, updated_at = datetime('now') WHERE company_id = @companyId`,
-    { isComplete: isComplete ? 1 : 0, companyId },
-  );
+  // Update completion status if changed
+  if (!!setup.is_complete !== isComplete) {
+    run(
+      `UPDATE setup_state SET is_complete = @isComplete, updated_at = datetime('now') WHERE company_id = @companyId`,
+      { isComplete: isComplete ? 1 : 0, companyId },
+    );
+  }
 
   res.json({
     success: true,
@@ -313,6 +307,66 @@ router.post('/skip-interviewers', async (req: Request, res: Response) => {
     success: true,
     message: 'Interviewer provisioning skipped. You can add interviewers later from the admin dashboard.',
     data: { skipped: true },
+  });
+});
+
+// POST /api/v1/setup/step/:step — Mark a setup step as completed
+router.post('/step/:step', async (req: Request, res: Response) => {
+  const { companyId } = req.auth!;
+  const step = parseInt(req.params.step as string, 10);
+  if (step < 1 || step > 5) {
+    res.status(400).json({ success: false, error: 'Invalid step number' });
+    return;
+  }
+
+  const columnMap: Record<number, string> = {
+    2: 'step_database',
+    3: 'step_branding',
+    4: 'step_model_provider',
+    5: 'step_interviewers',
+  };
+
+  // Step 1 is always completed (registration)
+  if (step === 1) {
+    res.json({ success: true, message: 'Step 1 is always completed' });
+    return;
+  }
+
+  const column = columnMap[step];
+  run(
+    `UPDATE setup_state SET ${column} = 1 WHERE company_id = @companyId`,
+    { companyId },
+  );
+
+  // Check if all steps are complete
+  const setup = getOne<{ step_database: number; step_branding: number; step_model_provider: number; step_interviewers: number }>(
+    'SELECT step_database, step_branding, step_model_provider, step_interviewers FROM setup_state WHERE company_id = @companyId',
+    { companyId },
+  );
+  if (setup && setup.step_database && setup.step_branding && setup.step_model_provider && setup.step_interviewers) {
+    run('UPDATE setup_state SET is_complete = 1 WHERE company_id = @companyId', { companyId });
+  }
+
+  res.json({ success: true, message: `Step ${step} marked as completed` });
+});
+
+// GET /api/v1/setup/model-configs — Check if model provider is configured
+router.get('/model-configs', async (req: Request, res: Response) => {
+  const { companyId } = req.auth!;
+  const main = getOne<{ id: string; provider: string; model_name: string }>(
+    'SELECT id, provider, model_name FROM model_provider_configs WHERE company_id = @companyId AND role = @role',
+    { companyId, role: 'main' },
+  );
+  const verification = getOne<{ id: string; provider: string; model_name: string }>(
+    'SELECT id, provider, model_name FROM model_provider_configs WHERE company_id = @companyId AND role = @role',
+    { companyId, role: 'verification' },
+  );
+  res.json({
+    success: true,
+    data: {
+      main: main ? { id: main.id, provider: main.provider, modelName: main.model_name } : null,
+      verification: verification ? { id: verification.id, provider: verification.provider, modelName: verification.model_name } : null,
+    },
   });
 });
 
