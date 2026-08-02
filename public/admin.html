@@ -385,6 +385,9 @@
       currentSetupStep = data.steps.find(s => !s.isCompleted)?.step || 5;
       document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
       document.getElementById('section-setup').style.display = 'block';
+      // Hide sidebar during wizard
+      document.querySelector('.sidebar').style.display = 'none';
+      document.querySelector('.main').style.marginLeft = '0';
       renderSetupStepsBar();
       renderSetupStep(currentSetupStep);
     }
@@ -422,6 +425,9 @@
     }
 
     function finishSetup() {
+      // Restore sidebar
+      document.querySelector('.sidebar').style.display = '';
+      document.querySelector('.main').style.marginLeft = '';
       showSection('dashboard');
     }
 
@@ -435,11 +441,61 @@
     function renderSetupStep2(el) {
       el.innerHTML = `
         <h3>Step 2: Database Setup</h3>
-        <p style="color:#64748b;margin-bottom:16px;">SQLite is the default and already configured. No action needed for most installations.</p>
+        <p style="color:#64748b;margin-bottom:16px;">Choose your database. SQLite is the default and works for most self-hosted installations. For production or team use, PostgreSQL or MySQL are recommended.</p>
+        <form onsubmit="saveDbConfig(event)" style="margin-bottom:16px;">
+          <div class="form-group"><label>Database Type</label>
+            <select id="db-type" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;">
+              <option value="sqlite" selected>SQLite (default, file-based)</option>
+              <option value="postgresql">PostgreSQL</option>
+              <option value="mysql">MySQL</option>
+              <option value="sqlserver">SQL Server</option>
+            </select>
+          </div>
+          <div id="db-conn-fields" style="display:none;">
+            <div class="form-group"><label>Host</label><input type="text" id="db-host" placeholder="localhost"></div>
+            <div class="form-group"><label>Port</label><input type="number" id="db-port" placeholder="5432"></div>
+            <div class="form-group"><label>Database Name</label><input type="text" id="db-name" placeholder="apar"></div>
+            <div class="form-group"><label>Username</label><input type="text" id="db-user" placeholder="postgres"></div>
+            <div class="form-group"><label>Password</label><input type="password" id="db-pass" placeholder="password"></div>
+          </div>
+          <div id="db-config-error" class="error" style="display:none;"></div>
+          <button type="submit" class="btn btn-sm">Save Configuration</button>
+        </form>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-sm" style="background:#64748b;" onclick="setupNav(1)">&larr; Back</button>
           <button class="btn btn-sm" onclick="completeSetupStep(2)">Mark Complete &amp; Next &rarr;</button>
         </div>`;
+      document.getElementById('db-type').addEventListener('change', function() {
+        document.getElementById('db-conn-fields').style.display = this.value === 'sqlite' ? 'none' : 'block';
+      });
+    }
+
+    async function saveDbConfig(e) {
+      e.preventDefault();
+      const dbType = document.getElementById('db-type').value;
+      const payload = { backend: dbType };
+      if (dbType !== 'sqlite') {
+        const host = document.getElementById('db-host').value || 'localhost';
+        const port = document.getElementById('db-port').value || (dbType === 'postgresql' ? '5432' : dbType === 'mysql' ? '3306' : '1433');
+        const dbName = document.getElementById('db-name').value || 'apar';
+        const user = document.getElementById('db-user').value || '';
+        const pass = document.getElementById('db-pass').value || '';
+        // Build connection string from fields
+        if (dbType === 'postgresql') {
+          payload.connectionString = `postgresql://${user}:${pass}@${host}:${port}/${dbName}`;
+        } else if (dbType === 'mysql') {
+          payload.connectionString = `mysql://${user}:${pass}@${host}:${port}/${dbName}`;
+        } else if (dbType === 'sqlserver') {
+          payload.connectionString = `Server=${host},${port};Database=${dbName};User Id=${user};Password=${pass};`;
+        }
+      }
+      const data = await apiCall('POST', '/setup/database', payload);
+      if (data.success) {
+        renderSetupStep(2);
+      } else {
+        document.getElementById('db-config-error').textContent = data.error;
+        document.getElementById('db-config-error').style.display = 'block';
+      }
     }
 
     function renderSetupStep3(el) {

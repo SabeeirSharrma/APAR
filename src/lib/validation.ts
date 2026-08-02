@@ -113,8 +113,13 @@ export const sendMessageSchema = z.object({
 
 export const databaseSetupSchema = z.object({
   companyId: z.string().uuid('Invalid company ID'),
-  backend: z.enum(['sqlite', 'redis', 'supabase', 'firebase', 'mongodb', 'custom']),
+  backend: z.enum(['sqlite (local)', 'postgresql', 'mysql', 'sqlserver', 'redis', 'supabase', 'firebase', 'mongodb', 'custom']),
   connectionString: z.string().max(2000).optional(),
+  host: z.string().max(200).optional(),
+  port: z.string().max(10).optional(),
+  database: z.string().max(200).optional(),
+  username: z.string().max(200).optional(),
+  password: z.string().max(200).optional(),
 });
 
 export const brandingSetupSchema = z.object({
