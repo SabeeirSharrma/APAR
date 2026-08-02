@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import path from 'path';
+import { mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { initDb } from './db/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
@@ -14,6 +15,12 @@ dotenv.config();
 
 // Initialize database
 initDb();
+
+// Ensure data directories exist
+const dataDir = path.join(process.cwd(), 'data');
+mkdirSync(dataDir, { recursive: true });
+mkdirSync(path.join(dataDir, 'custom_uis'), { recursive: true });
+mkdirSync(path.join(dataDir, 'ui-templates'), { recursive: true });
 
 // Create Express app
 const app = express();
@@ -67,6 +74,7 @@ app.get('/api/v1', (_req, res) => {
       messages: '/api/v1/messages',
       setup: '/api/v1/setup',
       features: '/api/v1/features',
+      customUi: '/api/v1/custom-ui',
       status: '/api/v1/status/:applicationId (public)',
     },
     frontend: {

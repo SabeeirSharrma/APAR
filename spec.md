@@ -873,7 +873,48 @@ gets built):**
     notification to all company admins when position has zero interviewers and
     applicant is stuck in queue.
 
-## 22. Roadmap
+## 22. Custom UI System
+
+The custom UI system allows companies to replace default platform interfaces with
+their own branded designs. All platforms (desktop, tablet, mobile, web dash,
+applicant form) support full UI customization.
+
+### Architecture
+
+- **Storage**: Custom UI files stored on disk under `data/custom_uis/{companyId}/{platform}/`
+- **Database**: `custom_uis` table tracks metadata (name, version, manifest, active status)
+- **Versioning**: Semantic versioning with update check endpoint for client auto-updates
+- **Base templates**: 5 default templates provided as starting points
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/custom-ui` | GET | List all custom UIs for company |
+| `/api/v1/custom-ui/:platform` | GET | Get active UI for platform |
+| `/api/v1/custom-ui/:platform` | POST | Create/update UI (files as JSON object) |
+| `/api/v1/custom-ui/:platform/activate/:id` | POST | Activate specific version |
+| `/api/v1/custom-ui/:platform/:id` | DELETE | Delete inactive version |
+| `/api/v1/custom-ui/:platform/check-update` | GET | Check for updates (clients) |
+| `/api/v1/custom-ui/:platform/files/*` | GET | Serve static UI files |
+| `/api/v1/custom-ui/defaults` | GET | List available base templates |
+| `/api/v1/custom-ui/defaults/:template/install` | POST | Install template as custom UI |
+
+### Platforms
+
+1. **desktop** — Wide layout, sidebar navigation, keyboard-optimized
+2. **tablet** — Touch-friendly, card-based, bottom tab bar
+3. **mobile** — Compact, bottom navigation, swipe gestures
+4. **web_dash** — Admin dashboard, sidebar nav, data tables
+5. **applicant_form** — Clean submission form, drag-and-drop upload
+
+### WebView Caching (Mobile/Desktop Clients)
+
+Clients check for updates on launch via `/check-update?currentVersion=x`. If new
+version available, download and cache locally. No App Store re-review needed for
+UI changes — only native code changes require re-submission.
+
+## 23. Roadmap
 
 - **v1 — Stage 1 (base working version)**: core pipeline (§4-§9) + web UIs only
   (applicant submission, admin panel, **and interviewer web UI** — used until the
