@@ -1,0 +1,10 @@
+.omo/
+node_modules/
+dist/
+dist-server/
+.env
+.env.*
+*.local
+*.tsbuildinfo
+.DS_Store
+spec.md
