@@ -3,12 +3,17 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { MAX_PDF_BYTES } from "../shared/types";
+import { runMigrations } from "./db/client";
+import { adminPositionsRoute } from "./routes/admin-positions";
+import { positionsPublicRoute } from "./routes/positions-public";
 import { reviewRoute } from "./routes/review";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
 const MULTIPART_OVERHEAD_BYTES = 1024 * 1024;
 const MAX_BODY_BYTES = MAX_PDF_BYTES + MULTIPART_OVERHEAD_BYTES;
+
+runMigrations();
 
 const app = new Hono();
 
@@ -20,7 +25,7 @@ app.use("*", async (c, next) => {
 });
 
 app.use(
-  "/api/review",
+  "/api/*",
   bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: (c) =>
@@ -29,6 +34,8 @@ app.use(
 );
 
 app.route("/", reviewRoute);
+app.route("/", positionsPublicRoute);
+app.route("/", adminPositionsRoute);
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 

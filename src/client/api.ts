@@ -1,15 +1,16 @@
-import { FORM_FIELDS, ReviewResponseSchema, type Provider, type ReviewResponse } from "../shared/types";
-
-export interface SubmitReviewInput {
-  file: File;
-  criteria: string;
-  provider: Provider;
-  openrouterApiKey?: string;
-  openrouterModel?: string;
-  ollamaEndpoint?: string;
-  ollamaModel?: string;
-  verifierModelOverride?: string;
-}
+import {
+  FORM_FIELDS,
+  PositionInputSchema,
+  PositionSchema,
+  PositionSummarySchema,
+  ReviewErrorSchema,
+  ReviewResponseSchema,
+  type Position,
+  type PositionInput,
+  type PositionSummary,
+  type ReviewResponse,
+} from "../shared/types";
+import { z } from "zod";
 
 /** Transport-level failure: unreachable server, non-JSON body, malformed payload. */
 export class ApiTransportError extends Error {
@@ -20,21 +21,62 @@ export class ApiTransportError extends Error {
 }
 
 /**
- * POSTs the review form. Resolves with the discriminated ReviewResponse on
- * any well-formed server answer (including business errors); throws
- * ApiTransportError only when no trustworthy response exists.
- * No artificial fetch timeout — local models can legitimately take minutes.
+ * Fetches JSON and validates it against `schema`.
+ * Server error bodies (ReviewError shape) surface their message directly;
+ * anything else non-OK becomes a generic transport error.
+ */
+async function requestJson<T>(
+  url: string,
+  init: RequestInit | undefined,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch {
+    throw new ApiTransportError("Could not reach the APAR server. Check that it is running.");
+  }
+
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    throw new ApiTransportError(`The server returned a non-JSON response (HTTP ${res.status}).`);
+  }
+
+  const serverError = ReviewErrorSchema.safeParse(json);
+  if (serverError.success) {
+    throw new ApiTransportError(serverError.data.error.message);
+  }
+  if (!res.ok) {
+    throw new ApiTransportError(`Request failed (HTTP ${res.status}).`);
+  }
+  try {
+    return schema.parse(json);
+  } catch {
+    throw new ApiTransportError("The server returned a malformed response.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Review submission
+// ---------------------------------------------------------------------------
+
+export interface SubmitReviewInput {
+  file: File;
+  positionId: string;
+}
+
+/**
+ * POSTs the resume against a saved position. Resolves with the discriminated
+ * ReviewResponse on any well-formed answer; throws ApiTransportError only
+ * when no trustworthy response exists. No artificial timeout — local models
+ * can legitimately take minutes.
  */
 export async function submitReview(input: SubmitReviewInput): Promise<ReviewResponse> {
   const fd = new FormData();
   fd.set(FORM_FIELDS.file, input.file);
-  fd.set(FORM_FIELDS.criteria, input.criteria);
-  fd.set(FORM_FIELDS.provider, input.provider);
-  if (input.openrouterApiKey) fd.set(FORM_FIELDS.openrouterApiKey, input.openrouterApiKey);
-  if (input.openrouterModel) fd.set(FORM_FIELDS.openrouterModel, input.openrouterModel);
-  if (input.ollamaEndpoint) fd.set(FORM_FIELDS.ollamaEndpoint, input.ollamaEndpoint);
-  if (input.ollamaModel) fd.set(FORM_FIELDS.ollamaModel, input.ollamaModel);
-  if (input.verifierModelOverride) fd.set(FORM_FIELDS.verifierModelOverride, input.verifierModelOverride);
+  fd.set(FORM_FIELDS.positionId, input.positionId);
 
   let res: Response;
   try {
@@ -58,3 +100,51 @@ export async function submitReview(input: SubmitReviewInput): Promise<ReviewResp
     throw new ApiTransportError("The server returned a malformed response.");
   }
 }
+
+// ---------------------------------------------------------------------------
+// Public positions (applicant dropdown)
+// ---------------------------------------------------------------------------
+
+const PositionsListSchema = z.object({ positions: z.array(PositionSummarySchema) });
+
+export async function listPositionSummaries(): Promise<PositionSummary[]> {
+  const body = await requestJson("/api/positions", undefined, PositionsListSchema);
+  return body.positions;
+}
+
+// ---------------------------------------------------------------------------
+// Admin CRUD
+// ---------------------------------------------------------------------------
+
+const AdminPositionsListSchema = z.object({ positions: z.array(PositionSchema) });
+
+export async function adminListPositions(): Promise<Position[]> {
+  const body = await requestJson("/api/admin/positions", undefined, AdminPositionsListSchema);
+  return body.positions;
+}
+
+function jsonInit(method: string, payload: unknown): RequestInit {
+  return {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  };
+}
+
+export async function adminCreatePosition(input: PositionInput): Promise<Position> {
+  return requestJson("/api/admin/positions", jsonInit("POST", input), PositionSchema);
+}
+
+export async function adminUpdatePosition(id: string, input: PositionInput): Promise<Position> {
+  return requestJson(`/api/admin/positions/${id}`, jsonInit("PUT", input), PositionSchema);
+}
+
+export async function adminDeletePosition(id: string): Promise<void> {
+  await requestJson(
+    `/api/admin/positions/${id}`,
+    { method: "DELETE" },
+    z.object({ ok: z.literal(true) }),
+  );
+}
+
+export { PositionInputSchema };
