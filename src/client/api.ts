@@ -5,10 +5,18 @@ import {
   PositionSummarySchema,
   ReviewErrorSchema,
   ReviewResponseSchema,
+  ApplicationDetailSchema,
+  ApplicationSummarySchema,
+  MeResponseSchema,
+  UserSchema,
+  type ApplicationDetail,
+  type ApplicationSummary,
   type Position,
   type PositionInput,
   type PositionSummary,
   type ReviewResponse,
+  type Role,
+  type User,
 } from "../shared/types";
 import { z } from "zod";
 
@@ -148,3 +156,80 @@ export async function adminDeletePosition(id: string): Promise<void> {
 }
 
 export { PositionInputSchema };
+
+// ---------------------------------------------------------------------------
+// Auth (stage 3)
+// ---------------------------------------------------------------------------
+
+export async function fetchMe(): Promise<User | null> {
+  const body = await requestJson("/api/auth/me", undefined, MeResponseSchema);
+  return body.user;
+}
+
+export async function login(email: string, password: string): Promise<User> {
+  return requestJson(
+    "/api/auth/login",
+    jsonInit("POST", { email, password }),
+    UserSchema,
+  );
+}
+
+export async function logout(): Promise<void> {
+  await requestJson("/api/auth/logout", { method: "POST" }, z.object({ ok: z.literal(true) }));
+}
+
+// ---------------------------------------------------------------------------
+// Roster (admin)
+// ---------------------------------------------------------------------------
+
+const UsersListSchema = z.object({ users: z.array(UserSchema) });
+
+export interface RosterFormInput {
+  name: string;
+  email: string;
+  active: boolean;
+  /** Empty string on update = keep current password. */
+  password: string;
+}
+
+export async function listRoster(role?: Role): Promise<User[]> {
+  const url = role === undefined ? "/api/admin/users" : `/api/admin/users?role=${role}`;
+  const body = await requestJson(url, undefined, UsersListSchema);
+  return body.users;
+}
+
+export async function createInterviewer(input: RosterFormInput): Promise<User> {
+  return requestJson("/api/admin/users", jsonInit("POST", input), UserSchema);
+}
+
+export async function updateInterviewer(id: string, input: RosterFormInput): Promise<User> {
+  return requestJson(`/api/admin/users/${id}`, jsonInit("PUT", input), UserSchema);
+}
+
+export async function deleteInterviewer(id: string): Promise<void> {
+  await requestJson(
+    `/api/admin/users/${id}`,
+    { method: "DELETE" },
+    z.object({ ok: z.literal(true) }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Applications (stage 3)
+// ---------------------------------------------------------------------------
+
+const ApplicationListSchema = z.object({ applications: z.array(ApplicationSummarySchema) });
+
+export async function adminListApplications(): Promise<ApplicationSummary[]> {
+  const body = await requestJson("/api/admin/applications", undefined, ApplicationListSchema);
+  return body.applications;
+}
+
+export async function listMyApplications(): Promise<ApplicationSummary[]> {
+  const body = await requestJson("/api/my/applications", undefined, ApplicationListSchema);
+  return body.applications;
+}
+
+export async function getMyApplication(id: string): Promise<ApplicationDetail> {
+  return requestJson(`/api/my/applications/${id}`, undefined, ApplicationDetailSchema);
+}

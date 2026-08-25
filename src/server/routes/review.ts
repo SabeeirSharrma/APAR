@@ -11,6 +11,8 @@ import { PipelineError } from "../errors";
 import { errorResponse } from "../http";
 import { runReview } from "../pipeline";
 import { extractResumeText } from "../pdf";
+import type { PersistedApplicationInfo } from "../repositories/applications";
+import { persistApplicationWithResult } from "../repositories/applications";
 import { getPosition, serializePosition } from "../repositories/positions";
 
 export const reviewRoute = new Hono();
@@ -58,7 +60,7 @@ reviewRoute.post("/api/review", async (c) => {
         "This position no longer exists. Pick another one and try again.",
       );
     }
-    const position = serializePosition(record);
+    const position = await serializePosition(record);
 
     const pdfBytes = new Uint8Array(await fileEntry.arrayBuffer());
     const resumeText = await extractResumeText(pdfBytes);
@@ -66,18 +68,49 @@ reviewRoute.post("/api/review", async (c) => {
     const cfg = resolveProviderConfig(position);
     const outcome = await runReview(resumeText, position.criteria, cfg);
 
+    const meta = {
+      provider: cfg.provider,
+      mainModel: cfg.mainModel,
+      verifierModel: cfg.verifierModel,
+      durationMs: Date.now() - startedAt,
+    };
+
+    let persisted: PersistedApplicationInfo;
+    try {
+      persisted = await persistApplicationWithResult({
+        positionId: position.id,
+        criteriaSnapshot: position.criteria,
+        filename: fileEntry.name,
+        pdfBytes: Buffer.from(pdfBytes),
+        resumeText,
+        outcome: {
+          overallVerdict: outcome.result.overallVerdict,
+          summary: outcome.result.summary,
+          perCriterion: outcome.result.perCriterion,
+          strengths: outcome.result.strengths,
+          concerns: outcome.result.concerns,
+          confidence: outcome.confidence,
+          attempts: outcome.attempts,
+          verificationIssues: outcome.verificationIssues,
+        },
+        meta,
+      });
+      console.log(
+        `[review] application ${persisted.applicationId} ${persisted.status}` +
+          (persisted.assignedTo ? ` -> ${persisted.assignedTo.name}` : " (no active pool member)"),
+      );
+    } catch (persistError) {
+      console.error("[review] FAILED TO PERSIST completed review:", persistError);
+      return errorResponse(c, "INTERNAL", "The review completed but could not be recorded. Please try again.");
+    }
+
     const success: ReviewSuccess = {
       status: "ok",
       result: outcome.result,
       confidence: outcome.confidence,
       attempts: outcome.attempts,
       verificationIssues: outcome.verificationIssues,
-      meta: {
-        provider: cfg.provider,
-        mainModel: cfg.mainModel,
-        verifierModel: cfg.verifierModel,
-        durationMs: Date.now() - startedAt,
-      },
+      meta,
     };
     return c.json(ReviewSuccessSchema.parse(success));
   } catch (err) {

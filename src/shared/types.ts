@@ -123,6 +123,7 @@ export const PositionSchema = z.object({
   ollamaEndpoint: z.string().optional(),
   ollamaModel: z.string().optional(),
   verifierModelOverride: z.string().optional(),
+  interviewerIds: z.array(z.uuid()).max(1000),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -134,6 +135,8 @@ export const PositionInputSchema = z
     name: z.string().trim().min(1, "Name is required").max(POSITION_NAME_MAX),
     criteria: z.string().trim().min(1, "Criteria is required").max(CRITERIA_MAX),
     ...ProviderConfigShape,
+    /** Interviewer pool for auto-assignment; may be empty (apps queue as stuck). */
+    interviewerIds: z.array(z.uuid()).max(1000),
   })
   .refine(
     (v) => v.provider !== "openrouter" || (!!v.openrouterApiKey && !!v.openrouterModel),
@@ -192,6 +195,93 @@ export const ReviewFormSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Accounts & auth (stage 3) — single company, admin-managed roster
+// ---------------------------------------------------------------------------
+
+export const ROLES = ["admin", "interviewer"] as const;
+export const RoleSchema = z.enum(ROLES);
+export type Role = z.infer<typeof RoleSchema>;
+
+export const UserSchema = z.object({
+  id: z.uuid(),
+  role: RoleSchema,
+  name: z.string().min(1),
+  email: z.string().toLowerCase(),
+  active: z.boolean(),
+  createdAt: z.iso.datetime(),
+});
+export type User = z.infer<typeof UserSchema>;
+
+export const LoginRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().min(3).max(320),
+  password: z.string().min(1).max(1024),
+});
+export type LoginRequest = z.infer<typeof LoginRequestSchema>;
+
+export const MeResponseSchema = z.object({ user: UserSchema.nullable() });
+
+/** Admin create/update payload for roster members. */
+export const RosterInputSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(POSITION_NAME_MAX),
+    email: z.string().trim().toLowerCase().email("A valid email is required"),
+    active: z.boolean(),
+    /** Required on create; on update empty string means "keep current password". */
+    password: z.string().max(1024),
+  })
+  .refine((v) => v.password === "" || v.password.length >= 8, {
+    message: "Password must be at least 8 characters",
+    path: ["password"],
+  });
+export type RosterInput = z.infer<typeof RosterInputSchema>;
+
+// ---------------------------------------------------------------------------
+// Applications & results (stage 3)
+// ---------------------------------------------------------------------------
+
+export const APPLICATION_STATUSES = ["queued", "assigned"] as const;
+export const ApplicationStatusSchema = z.enum(APPLICATION_STATUSES);
+export type ApplicationStatus = z.infer<typeof ApplicationStatusSchema>;
+
+/** Persisted pipeline outcome attached to an application. */
+export const StoredResultSchema = z.object({
+  overallVerdict: OverallVerdictSchema,
+  summary: z.string(),
+  perCriterion: z.array(PerCriterionScoreSchema),
+  strengths: z.array(z.string()),
+  concerns: z.array(z.string()),
+  confidence: z.enum(["high", "low"]),
+  attempts: z.number().int().min(1).max(MAX_ATTEMPTS),
+  verificationIssues: z.array(z.string()),
+  provider: ProviderSchema,
+  mainModel: z.string(),
+  verifierModel: z.string(),
+  durationMs: z.number().int().nonnegative(),
+});
+export type StoredResult = z.infer<typeof StoredResultSchema>;
+
+export const ApplicationSummarySchema = z.object({
+  id: z.uuid(),
+  positionId: z.uuid(),
+  positionName: z.string(),
+  status: ApplicationStatusSchema,
+  applicantFilename: z.string(),
+  createdAt: z.iso.datetime(),
+  assignedTo: z.object({ id: z.uuid(), name: z.string() }).nullable(),
+  verdict: OverallVerdictSchema.nullable(),
+  confidence: z.enum(["high", "low"]).nullable(),
+});
+export type ApplicationSummary = z.infer<typeof ApplicationSummarySchema>;
+
+export const ApplicationDetailSchema = ApplicationSummarySchema.extend({
+  criteriaSnapshot: z.string(),
+  resumeText: z.string(),
+  result: StoredResultSchema.nullable(),
+  viewedAt: z.iso.datetime().nullable(),
+});
+export type ApplicationDetail = z.infer<typeof ApplicationDetailSchema>;
+
+// ---------------------------------------------------------------------------
 // API responses
 // ---------------------------------------------------------------------------
 
@@ -225,6 +315,9 @@ export const ErrorCodeSchema = z.enum([
   "UNREADABLE_PDF", // 422 — not a PDF / no extractable text
   "POSITION_NOT_FOUND", // 404 — referenced position does not exist
   "NOT_FOUND", // 404 — unknown route/resource
+  "AUTH_REQUIRED", // 401 — no/invalid/expired session
+  "FORBIDDEN", // 403 — authenticated but wrong role
+  "CONFLICT", // 409 — delete blocked by references / duplicate email
   "PROVIDER_ERROR", // 502 — upstream AI provider failed
   "PROVIDER_TIMEOUT", // 504 — upstream AI provider timed out
   "INTERNAL", // 500 — unexpected
@@ -252,6 +345,9 @@ export const ERROR_HTTP_STATUS = {
   UNREADABLE_PDF: 422,
   POSITION_NOT_FOUND: 404,
   NOT_FOUND: 404,
+  AUTH_REQUIRED: 401,
+  FORBIDDEN: 403,
+  CONFLICT: 409,
   PROVIDER_ERROR: 502,
   PROVIDER_TIMEOUT: 504,
   INTERNAL: 500,

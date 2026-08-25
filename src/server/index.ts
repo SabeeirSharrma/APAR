@@ -3,10 +3,18 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { MAX_PDF_BYTES } from "../shared/types";
+import { hashPassword } from "./auth/passwords";
+import { requireRole } from "./auth/middleware";
+import { pruneExpiredSessions } from "./auth/sessions";
 import { runMigrations } from "./db/client";
+import { adminApplicationsRoute } from "./routes/admin-applications";
 import { adminPositionsRoute } from "./routes/admin-positions";
+import { adminUsersRoute } from "./routes/admin-users";
+import { authRoute } from "./routes/auth";
+import { myApplicationsRoute } from "./routes/my-applications";
 import { positionsPublicRoute } from "./routes/positions-public";
 import { reviewRoute } from "./routes/review";
+import { countAdmins, createUserRecord, emailExists } from "./repositories/users";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -14,6 +22,32 @@ const MULTIPART_OVERHEAD_BYTES = 1024 * 1024;
 const MAX_BODY_BYTES = MAX_PDF_BYTES + MULTIPART_OVERHEAD_BYTES;
 
 runMigrations();
+await seedBootstrapAdmin();
+await pruneExpiredSessions();
+
+async function seedBootstrapAdmin(): Promise<void> {
+  if ((await countAdmins()) > 0) return;
+  const email = process.env.APAR_ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.APAR_ADMIN_PASSWORD;
+  if (email === undefined || email === "" || password === undefined || password.length < 8) {
+    console.warn(
+      "[apar] No admin account exists. Set APAR_ADMIN_EMAIL and APAR_ADMIN_PASSWORD " +
+        "(min 8 chars) and restart to bootstrap one.",
+    );
+    return;
+  }
+  if (await emailExists(email)) {
+    console.warn(`[apar] Cannot seed admin: email ${email} is already taken by another account.`);
+    return;
+  }
+  await createUserRecord({
+    role: "admin",
+    name: "Administrator",
+    email,
+    passwordHash: await hashPassword(password),
+  });
+  console.log(`[apar] seeded bootstrap admin account: ${email}`);
+}
 
 const app = new Hono();
 
@@ -33,9 +67,17 @@ app.use(
   }),
 );
 
+app.route("/", authRoute);
 app.route("/", reviewRoute);
 app.route("/", positionsPublicRoute);
+
+app.use("/api/admin/*", requireRole("admin"));
 app.route("/", adminPositionsRoute);
+app.route("/", adminUsersRoute);
+app.route("/", adminApplicationsRoute);
+
+app.use("/api/my/*", requireRole("interviewer"));
+app.route("/", myApplicationsRoute);
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 

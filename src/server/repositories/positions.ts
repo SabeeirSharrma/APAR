@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import type { Position, PositionInput } from "../../shared/types";
 import { db } from "../db/client";
 import type { NewPositionRecord, PositionRecord } from "../db/schema";
-import { positions } from "../db/schema";
+import { positionPool, positions } from "../db/schema";
 
 function recordFromInput(
   input: PositionInput,
@@ -20,6 +20,14 @@ function recordFromInput(
   };
 }
 
+async function poolIdsFor(positionId: string): Promise<string[]> {
+  const rows = await db
+    .select({ interviewerId: positionPool.interviewerId })
+    .from(positionPool)
+    .where(eq(positionPool.positionId, positionId));
+  return rows.map((r) => r.interviewerId);
+}
+
 export async function listPositions(): Promise<PositionRecord[]> {
   return db.select().from(positions).orderBy(asc(positions.createdAtMs));
 }
@@ -29,28 +37,53 @@ export async function getPosition(id: string): Promise<PositionRecord | null> {
   return rows[0] ?? null;
 }
 
-export async function createPosition(input: PositionInput): Promise<PositionRecord> {
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Replaces the pool with exactly these members (caller pre-validates ids). */
+function writePool(tx: Tx, positionId: string, interviewerIds: string[]): void {
+  tx.delete(positionPool).where(eq(positionPool.positionId, positionId)).run();
+  if (interviewerIds.length > 0) {
+    // Deduplicate defensively; unique index would reject dupes otherwise.
+    const unique = [...new Set(interviewerIds)];
+    tx.insert(positionPool)
+      .values(unique.map((interviewerId) => ({ positionId, interviewerId })))
+      .run();
+  }
+}
+
+export async function createPosition(input: PositionInput): Promise<Position> {
   const now = Date.now();
+  const id = randomUUID();
   const record: NewPositionRecord = {
-    id: randomUUID(),
+    id,
     ...recordFromInput(input),
     createdAtMs: now,
     updatedAtMs: now,
   };
-  const inserted = await db.insert(positions).values(record).returning();
-  const row = inserted[0];
-  if (!row) throw new Error("position insert returned no row");
-  return row;
+  db.transaction((tx) => {
+    tx.insert(positions).values(record).run();
+    writePool(tx, id, input.interviewerIds);
+  });
+  const created = await getPosition(id);
+  if (created === null) throw new Error("position insert returned no row");
+  return serialize(created, [...new Set(input.interviewerIds)]);
 }
 
-export async function updatePosition(id: string, input: PositionInput): Promise<PositionRecord | null> {
-  if ((await getPosition(id)) === null) return null;
-  const updated = await db
-    .update(positions)
-    .set({ ...recordFromInput(input), updatedAtMs: Date.now() })
-    .where(eq(positions.id, id))
-    .returning();
-  return updated[0] ?? null;
+export async function updatePosition(id: string, input: PositionInput): Promise<Position | null> {
+  const updatedRow = db.transaction((tx) => {
+    const rows = tx
+      .update(positions)
+      .set({ ...recordFromInput(input), updatedAtMs: Date.now() })
+      .where(eq(positions.id, id))
+      .returning()
+      .all();
+    const row = rows[0];
+    if (row === undefined) return null;
+    writePool(tx, id, input.interviewerIds);
+    return row;
+  });
+  if (updatedRow === null) return null;
+  return serialize(updatedRow, [...new Set(input.interviewerIds)]);
 }
 
 export async function deletePosition(id: string): Promise<boolean> {
@@ -58,7 +91,7 @@ export async function deletePosition(id: string): Promise<boolean> {
   return result.changes > 0;
 }
 
-export function serializePosition(row: PositionRecord): Position {
+function serialize(row: PositionRecord, interviewerIds: string[]): Position {
   return {
     id: row.id,
     name: row.name,
@@ -71,7 +104,30 @@ export function serializePosition(row: PositionRecord): Position {
     ...(row.verifierModelOverride !== null
       ? { verifierModelOverride: row.verifierModelOverride }
       : {}),
+    interviewerIds,
     createdAt: new Date(row.createdAtMs).toISOString(),
     updatedAt: new Date(row.updatedAtMs).toISOString(),
   };
+}
+
+export async function serializePosition(row: PositionRecord): Promise<Position> {
+  return serialize(row, await poolIdsFor(row.id));
+}
+
+export async function serializePositions(rows: PositionRecord[]): Promise<Position[]> {
+  const allIds = rows.map((r) => r.id);
+  const poolRows =
+    allIds.length > 0
+      ? await db
+          .select({ positionId: positionPool.positionId, interviewerId: positionPool.interviewerId })
+          .from(positionPool)
+          .where(inArray(positionPool.positionId, allIds))
+      : [];
+  const byPosition = new Map<string, string[]>();
+  for (const r of poolRows) {
+    const list = byPosition.get(r.positionId) ?? [];
+    list.push(r.interviewerId);
+    byPosition.set(r.positionId, list);
+  }
+  return rows.map((row) => serialize(row, byPosition.get(row.id) ?? []));
 }
